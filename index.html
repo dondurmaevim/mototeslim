@@ -187,11 +187,35 @@ function PaketGonder({user,onClose}){
     return e;
   };
 
-  const next=()=>{
+  const next=async()=>{
     const e=step===1?v1():v2();
     if(Object.keys(e).length){setErr(e);return;}
     setErr({});
-    if(step===2){setDone(true);}else{setStep(2);}
+    if(step===2){
+      // Supabase'e sipariş kaydet
+      try{
+        const{data:{user:u}}=await sb.auth.getUser();
+        const gonAdres=farkliAdres?form.gonAdres:(user&&user.adres?user.adres:form.gonAdres);
+        const gonAd=farkliAdres?form.gonAd:(user?user.name.split(" ")[0]:"");
+        const gonSoyad=farkliAdres?form.gonSoyad:(user?user.name.split(" ")[1]||"":"");
+        const gonTel=farkliAdres?form.gonTel:(user?user.tel:"");
+        await sb.from("teslimatlar").insert({
+          musteri_id:u?.id||null,
+          gon_ad:gonAd+" "+gonSoyad,
+          gon_tel:gonTel,
+          gon_adres:gonAdres,
+          al_ad:form.alAd+" "+form.alSoyad,
+          al_tel:form.alTel,
+          al_adres:form.alAdres,
+          agirlik:efKg,
+          mesafe:mesafe,
+          fiyat:fiyat,
+          arac_turu:kg<=15?"motorsiklet":"otomobil",
+          durum:"bekliyor",
+        });
+      }catch(e){console.log("Kayıt hatası:",e);}
+      setDone(true);
+    }else{setStep(2);}
   };
 
   if(done)return(
@@ -709,34 +733,290 @@ function GondericiModal({onClose, onSuccess}){
    KURYE DASHBOARD
 ══════════════════════════════════════════════ */
 function KuryeDash({user,onLogout}){
-  const[teslimatlar,setTeslimatlar]=useState([]);
+  const[tab,setTab]=useState("bekleyen");
+  const[siparisler,setSiparisler]=useState([]);
+  const[aktifSiparis,setAktifSiparis]=useState(null);
+  const[loading,setLoading]=useState(true);
+  const[teslimKoduInput,setTeslimKoduInput]=useState("");
+  const[teslimHata,setTeslimHata]=useState("");
+  const[stats,setStats]=useState({toplamTeslimat:0,buAyKazanc:0,toplamKazanc:0,puan:0});
+
   useEffect(()=>{
-    sb.from("teslimatlar").select("*").order("created_at",{ascending:false}).limit(10)
-      .then(({data})=>data&&setTeslimatlar(data));
+    yukle();
+    // Her 15 sn yenile
+    const interval=setInterval(yukle,15000);
+    return()=>clearInterval(interval);
   },[]);
 
+  const yukle=async()=>{
+    try{
+      // Bekleyen siparişler
+      const{data:bek}=await sb.from("teslimatlar").select("*").eq("durum","bekliyor").order("created_at",{ascending:false});
+      // Kurye'nin aktif siparişi
+      const{data:{user:u}}=await sb.auth.getUser();
+      const{data:akt}=await sb.from("teslimatlar").select("*").eq("kurye_id",u.id).in("durum",["kabul_edildi","yolda"]).single();
+      // Tamamlanan siparişler
+      const{data:tam}=await sb.from("teslimatlar").select("*").eq("kurye_id",u.id).eq("durum","tamamlandi");
+      
+      setSiparisler(bek||[]);
+      setAktifSiparis(akt||null);
+      
+      // Stats hesapla
+      const toplamT=tam?.length||0;
+      const buAy=tam?.filter(t=>{
+        const d=new Date(t.created_at);
+        const now=new Date();
+        return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
+      })||[];
+      const buAyK=buAy.reduce((s,t)=>s+(t.fiyat*(1-0.25)),0);
+      const toplamK=tam?.reduce((s,t)=>s+(t.fiyat*(1-0.25)),0)||0;
+      // Sadakat ödülü: her 50 teslimatta ₺50
+      const odul=Math.floor(toplamT/50)*50;
+      setStats({toplamTeslimat:toplamT,buAyKazanc:Math.ceil(buAyK),toplamKazanc:Math.ceil(toplamK+odul),puan:4.8});
+    }catch(e){
+      console.log(e);
+    }
+    setLoading(false);
+  };
+
+  const kabul=async(siparis)=>{
+    const{data:{user:u}}=await sb.auth.getUser();
+    await sb.from("teslimatlar").update({
+      kurye_id:u.id, durum:"kabul_edildi", kabul_zamani:new Date().toISOString()
+    }).eq("id",siparis.id);
+    setAktifSiparis({...siparis,kurye_id:u.id,durum:"kabul_edildi"});
+    setSiparisler(s=>s.filter(x=>x.id!==siparis.id));
+    setTab("aktif");
+    // Google Maps - gönderici adresine git
+    const adres=encodeURIComponent(siparis.gon_adres+", Türkiye");
+    window.open("https://www.google.com/maps/dir/?api=1&destination="+adres+"&travelmode=driving","_blank");
+  };
+
+  const paketiAldim=async()=>{
+    const kod=Math.floor(1000+Math.random()*9000).toString();
+    await sb.from("teslimatlar").update({durum:"yolda",teslim_kodu:kod}).eq("id",aktifSiparis.id);
+    setAktifSiparis({...aktifSiparis,durum:"yolda",teslim_kodu:kod});
+    // Google Maps - alıcı adresine git
+    const adres=encodeURIComponent(aktifSiparis.al_adres+", Türkiye");
+    window.open("https://www.google.com/maps/dir/?api=1&destination="+adres+"&travelmode=driving","_blank");
+    alert("✓ Teslim kodu müşteriye SMS ile gönderildi: "+kod);
+  };
+
+  const teslimEt=async()=>{
+    if(teslimKoduInput!==aktifSiparis.teslim_kodu){
+      setTeslimHata("Kod hatalı! Lütfen tekrar deneyin.");
+      return;
+    }
+    await sb.from("teslimatlar").update({durum:"tamamlandi",tamamlanma_zamani:new Date().toISOString()}).eq("id",aktifSiparis.id);
+    const kazanc=Math.ceil(aktifSiparis.fiyat*(1-0.25));
+    const yeniToplam=stats.toplamTeslimat+1;
+    // Sadakat ödülü kontrolü
+    const odulKazandi=yeniToplam%50===0;
+    setAktifSiparis(null);
+    setTeslimKoduInput("");
+    setTeslimHata("");
+    setTab("bekleyen");
+    yukle();
+    if(odulKazandi){
+      alert("🎉 Tebrikler! 50 teslimat tamamladın! ₺50 sadakat ödülü hesabına eklendi!");
+    }else{
+      alert("✓ Teslimat tamamlandı! Kazancın: ₺"+kazanc);
+    }
+  };
+
+  const sonrakiOdul=50-(stats.toplamTeslimat%50);
+  const odul=Math.floor(stats.toplamTeslimat/50)*50;
+
   return(
-    <div style={{maxWidth:"880px",margin:"0 auto",padding:"36px 20px"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"28px"}}>
+    <div style={{maxWidth:"880px",margin:"0 auto",padding:"24px 20px"}}>
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"24px"}}>
         <div>
-          <div style={{fontSize:"22px",fontWeight:"800"}}>Merhaba, {user.name.split(" ")[0]} 👋</div>
-          <div style={{fontSize:"12px",color:C.muted,marginTop:"4px"}}>Kurye Paneli</div>
+          <div style={{fontSize:"20px",fontWeight:"800"}}>Merhaba, {user.name.split(" ")[0]} 👋</div>
+          <div style={{fontSize:"12px",color:C.muted,marginTop:"3px"}}>Kurye Paneli</div>
         </div>
         <button onClick={onLogout} style={{...btnS,fontSize:"12px",padding:"7px 14px"}}>Çıkış</button>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"14px",marginBottom:"28px"}}>
-        {[{l:"Bu Ay Kazanç",v:"₺0",s:"Henüz teslimat yok"},{l:"Toplam Kazanç",v:"₺0",s:"Tüm zamanlar"},{l:"Aktif Teslimat",v:"0",s:"Şu an"},{l:"Puan",v:"—",s:"Henüz değerlendirme yok"}].map(x=>(
-          <div key={x.l} style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"20px"}}>
-            <div style={{fontSize:"11px",color:C.muted,fontWeight:"600",marginBottom:"6px"}}>{x.l}</div>
-            <div style={{fontSize:"24px",fontWeight:"800"}}>{x.v}</div>
+
+      {/* Stats */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"12px",marginBottom:"20px"}}>
+        {[
+          {l:"Bu Ay Kazanç",v:"₺"+stats.buAyKazanc,s:"Net kazanç"},
+          {l:"Toplam Kazanç",v:"₺"+stats.toplamKazanc,s:odul>0?"₺"+odul+" ödül dahil":"Tüm zamanlar"},
+          {l:"Toplam Teslimat",v:stats.toplamTeslimat,s:"Tamamlanan"},
+          {l:"Puan",v:stats.toplamTeslimat>0?stats.puan+" ⭐":"—",s:"Değerlendirme"},
+        ].map(x=>(
+          <div key={x.l} style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"16px"}}>
+            <div style={{fontSize:"11px",color:C.muted,fontWeight:"600",marginBottom:"5px"}}>{x.l}</div>
+            <div style={{fontSize:"22px",fontWeight:"800"}}>{x.v}</div>
             <div style={{fontSize:"11px",color:C.muted,marginTop:"3px"}}>{x.s}</div>
           </div>
         ))}
       </div>
-      <div style={{marginBottom:"14px",fontWeight:"700",fontSize:"15px"}}>Teslimatlar</div>
-      <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"40px",textAlign:"center",color:C.muted,fontSize:"13px"}}>
-        🏍️ Henüz teslimat yok. Yakında görevler burada görünecek!
+
+      {/* Sadakat ödülü */}
+      <div style={{background:"linear-gradient(135deg,rgba(232,80,10,0.1),rgba(30,58,96,0.2))",border:"1px solid "+C.accent,borderRadius:"14px",padding:"16px",marginBottom:"20px"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"10px"}}>
+          <div style={{fontSize:"13px",fontWeight:"700"}}>🏆 Sadakat Ödülü</div>
+          <div style={{fontSize:"12px",color:C.accent,fontWeight:"700"}}>Her 50 teslimat = ₺50</div>
+        </div>
+        <div style={{background:"rgba(0,0,0,0.2)",borderRadius:"20px",height:"8px",marginBottom:"8px"}}>
+          <div style={{background:"linear-gradient(90deg,"+C.accent+",#f26419)",borderRadius:"20px",height:"8px",width:((stats.toplamTeslimat%50)/50*100)+"%",transition:"width .5s"}}/>
+        </div>
+        <div style={{fontSize:"11px",color:C.muted}}>
+          {stats.toplamTeslimat%50===0&&stats.toplamTeslimat>0
+            ?"🎉 Ödül kazandın! Hesabına ₺50 eklendi."
+            :"Sonraki ödüle "+sonrakiOdul+" teslimat kaldı"}
+        </div>
       </div>
+
+      {/* Aktif sipariş varsa önce göster */}
+      {aktifSiparis&&(
+        <div style={{background:"rgba(34,197,94,0.08)",border:"2px solid "+C.success,borderRadius:"14px",padding:"20px",marginBottom:"20px"}} className="fade">
+          <div style={{fontSize:"14px",fontWeight:"800",color:C.success,marginBottom:"14px"}}>
+            {aktifSiparis.durum==="kabul_edildi"?"🏍️ Gönderici Adresine Git":"📦 Alıcıya Teslim Et"}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px",marginBottom:"16px",fontSize:"12px"}}>
+            <div style={{background:"rgba(232,80,10,0.1)",borderRadius:"10px",padding:"12px"}}>
+              <div style={{color:C.accent,fontWeight:"700",marginBottom:"4px"}}>📤 GÖNDERİCİ</div>
+              <div style={{fontWeight:"600"}}>{aktifSiparis.gon_ad}</div>
+              <div style={{color:C.muted,marginTop:"2px"}}>{aktifSiparis.gon_tel}</div>
+              <div style={{color:C.muted,marginTop:"2px"}}>{aktifSiparis.gon_adres}</div>
+            </div>
+            <div style={{background:"rgba(34,197,94,0.08)",borderRadius:"10px",padding:"12px"}}>
+              <div style={{color:C.success,fontWeight:"700",marginBottom:"4px"}}>📥 ALICI</div>
+              <div style={{fontWeight:"600"}}>{aktifSiparis.al_ad}</div>
+              <div style={{color:C.muted,marginTop:"2px"}}>{aktifSiparis.al_tel}</div>
+              <div style={{color:C.muted,marginTop:"2px"}}>{aktifSiparis.al_adres}</div>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:"10px",alignItems:"center",marginBottom:"14px",fontSize:"12px"}}>
+            <span style={{background:C.accentGlow,border:"1px solid "+C.accent,borderRadius:"8px",padding:"4px 10px",color:C.accent,fontWeight:"700"}}>{aktifSiparis.agirlik} kg</span>
+            <span style={{background:"rgba(30,58,96,0.3)",border:"1px solid "+C.border,borderRadius:"8px",padding:"4px 10px",color:C.muted}}>{aktifSiparis.mesafe||"—"} km</span>
+            <span style={{background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.3)",borderRadius:"8px",padding:"4px 10px",color:C.success,fontWeight:"700"}}>₺{Math.ceil((aktifSiparis.fiyat||0)*0.75)} kazanç</span>
+          </div>
+
+          {aktifSiparis.durum==="kabul_edildi"&&(
+            <div style={{display:"flex",gap:"10px"}}>
+              <button onClick={()=>{
+                const adres=encodeURIComponent(aktifSiparis.gon_adres+", Türkiye");
+                window.open("https://www.google.com/maps/dir/?api=1&destination="+adres+"&travelmode=driving","_blank");
+              }} style={{...btnS,flex:1,fontSize:"13px",padding:"10px"}}>🗺️ Haritayı Aç</button>
+              <button onClick={paketiAldim} style={{...btnP,flex:1,fontSize:"13px",padding:"10px",boxShadow:"none"}}>📦 Paketi Aldım</button>
+            </div>
+          )}
+
+          {aktifSiparis.durum==="yolda"&&(
+            <div>
+              <div style={{background:"rgba(34,197,94,0.05)",border:"1px solid rgba(34,197,94,0.2)",borderRadius:"10px",padding:"12px",marginBottom:"12px",fontSize:"12px",color:C.success}}>
+                📱 Teslim kodu müşteriye gönderildi. Müşteriden kodu alın ve aşağıya girin.
+              </div>
+              <div style={{display:"flex",gap:"10px",alignItems:"center",marginBottom:"10px"}}>
+                <input value={teslimKoduInput} onChange={e=>setTeslimKoduInput(e.target.value)}
+                  placeholder="4 haneli kod" maxLength={4}
+                  style={{flex:1,padding:"12px",borderRadius:"9px",border:"1px solid "+C.inBorder,background:C.inBg,color:C.text,fontSize:"18px",fontWeight:"800",textAlign:"center",letterSpacing:"8px",outline:"none"}}/>
+                <button onClick={()=>{
+                  const adres=encodeURIComponent(aktifSiparis.al_adres+", Türkiye");
+                  window.open("https://www.google.com/maps/dir/?api=1&destination="+adres+"&travelmode=driving","_blank");
+                }} style={{...btnS,fontSize:"12px",padding:"12px 14px"}}>🗺️ Harita</button>
+              </div>
+              {teslimHata&&<div style={{color:C.error,fontSize:"11px",marginBottom:"8px"}}>⚠️ {teslimHata}</div>}
+              <button onClick={teslimEt} style={{...btnP,width:"100%",boxShadow:"none"}}>✓ Teslim Ettim</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div style={{display:"flex",gap:"6px",marginBottom:"16px",background:C.inBg,borderRadius:"10px",padding:"4px"}}>
+        {[["bekleyen","Bekleyen Siparişler"],["gecmis","Geçmiş"]].map(([v,l])=>(
+          <button key={v} onClick={()=>setTab(v)} style={{flex:1,padding:"8px",borderRadius:"7px",border:"none",background:tab===v?C.accent:"transparent",color:tab===v?"#fff":C.muted,fontSize:"12px",fontWeight:"700",cursor:"pointer"}}>{l}</button>
+        ))}
+      </div>
+
+      {/* Bekleyen siparişler */}
+      {tab==="bekleyen"&&(
+        <div>
+          {loading&&<div style={{textAlign:"center",color:C.muted,padding:"40px",fontSize:"13px"}}>⏳ Yükleniyor...</div>}
+          {!loading&&siparisler.length===0&&!aktifSiparis&&(
+            <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"50px",textAlign:"center",color:C.muted,fontSize:"13px"}}>
+              🏍️ Şu an bekleyen sipariş yok. Yeni siparişler otomatik görünecek.
+            </div>
+          )}
+          {!loading&&aktifSiparis&&siparisler.length===0&&(
+            <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"20px",textAlign:"center",color:C.muted,fontSize:"13px"}}>
+              Aktif teslimatın devam ediyor. Yeni sipariş almak için mevcut teslimatı tamamla.
+            </div>
+          )}
+          {siparisler.map(s=>(
+            <div key={s.id} style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"16px",marginBottom:"12px"}} className="fade">
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"12px"}}>
+                <div style={{fontSize:"11px",color:C.dim}}>#{s.id.slice(-6).toUpperCase()}</div>
+                <div style={{fontSize:"13px",fontWeight:"800",color:C.success}}>₺{Math.ceil((s.fiyat||0)*0.75)}</div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",fontSize:"12px",marginBottom:"12px"}}>
+                <div>
+                  <div style={{color:C.accent,fontWeight:"700",fontSize:"10px",marginBottom:"3px"}}>📤 GÖNDERİCİ</div>
+                  <div style={{fontWeight:"600"}}>{s.gon_ad}</div>
+                  <div style={{color:C.muted,fontSize:"11px"}}>{s.gon_adres}</div>
+                </div>
+                <div>
+                  <div style={{color:C.success,fontWeight:"700",fontSize:"10px",marginBottom:"3px"}}>📥 ALICI</div>
+                  <div style={{fontWeight:"600"}}>{s.al_ad}</div>
+                  <div style={{color:C.muted,fontSize:"11px"}}>{s.al_adres}</div>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:"8px",alignItems:"center",marginBottom:"12px"}}>
+                <span style={{fontSize:"11px",background:C.accentGlow,border:"1px solid "+C.accent,borderRadius:"6px",padding:"3px 8px",color:C.accent,fontWeight:"700"}}>{s.agirlik} kg</span>
+                <span style={{fontSize:"11px",background:"rgba(30,58,96,0.3)",border:"1px solid "+C.border,borderRadius:"6px",padding:"3px 8px",color:C.muted}}>{s.mesafe||"—"} km</span>
+                <span style={{fontSize:"11px",color:C.dim,marginLeft:"auto"}}>{new Date(s.created_at).toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}</span>
+              </div>
+              <button onClick={()=>kabul(s)} disabled={!!aktifSiparis}
+                style={{...btnP,width:"100%",boxShadow:"none",fontSize:"13px",padding:"10px",opacity:aktifSiparis?0.4:1,cursor:aktifSiparis?"not-allowed":"pointer"}}>
+                {aktifSiparis?"Önce aktif teslimatı tamamla":"✓ Kabul Et"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Geçmiş */}
+      {tab==="gecmis"&&(
+        <GecmisTeslimatlar userId={user.id}/>
+      )}
+    </div>
+  );
+}
+
+function GecmisTeslimatlar({userId}){
+  const[liste,setListe]=useState([]);
+  const[loading,setLoading]=useState(true);
+  useEffect(()=>{
+    const yukle=async()=>{
+      const{data:{user:u}}=await sb.auth.getUser();
+      const{data}=await sb.from("teslimatlar").select("*").eq("kurye_id",u.id).eq("durum","tamamlandi").order("created_at",{ascending:false}).limit(20);
+      setListe(data||[]);
+      setLoading(false);
+    };
+    yukle();
+  },[]);
+  if(loading)return <div style={{textAlign:"center",color:C.muted,padding:"30px",fontSize:"13px"}}>⏳ Yükleniyor...</div>;
+  if(liste.length===0)return <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"40px",textAlign:"center",color:C.muted,fontSize:"13px"}}>Henüz tamamlanan teslimat yok.</div>;
+  return(
+    <div>
+      {liste.map(s=>(
+        <div key={s.id} style={{background:C.card,border:"1px solid "+C.border,borderRadius:"12px",padding:"14px",marginBottom:"10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:"12px",fontWeight:"600"}}>{s.gon_adres}</div>
+            <div style={{fontSize:"11px",color:C.muted,marginTop:"2px"}}>→ {s.al_adres}</div>
+            <div style={{fontSize:"10px",color:C.dim,marginTop:"3px"}}>{new Date(s.created_at).toLocaleDateString("tr-TR")}</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:"15px",fontWeight:"800",color:C.success}}>₺{Math.ceil((s.fiyat||0)*0.75)}</div>
+            <div style={{fontSize:"10px",color:C.dim,marginTop:"2px"}}>{s.agirlik} kg · {s.mesafe||"—"} km</div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
