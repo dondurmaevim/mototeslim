@@ -94,7 +94,11 @@ function PaketGonder({user,onClose}){
   const desi=(parseFloat(form.en)||0)*(parseFloat(form.boy)||0)*(parseFloat(form.yukseklik)||0)/3000;
   const efKg=kg>20&&desi>0?Math.max(kg,desi):kg;
   const mesafe=mesafeHesap.km||0;
-  const fiyat=efKg>0&&mesafe>0?Math.ceil((efKg<=5?40:efKg<=15?70:efKg<=30?110:efKg<=60?180:280)+mesafe*2.5):0;
+  const mesafeM=mesafe*1000; // km → metre
+  const PER_100M=3; // her 100 metrede ₺3 (değiştirilebilir)
+  const bazFiyat=efKg<=5?40:efKg<=15?70:efKg<=30?110:efKg<=60?180:280;
+  const mesafeUcret=Math.ceil((mesafeM/100)*PER_100M);
+  const fiyat=efKg>0&&mesafe>0?bazFiyat+mesafeUcret:0;
   const komisyon=Math.ceil(fiyat*0.25);
   const kuryeKazanc=fiyat-komisyon;
 
@@ -133,7 +137,8 @@ function PaketGonder({user,onClose}){
         const sureDk=Math.ceil(yolMesafesi*2.5); // ortalama 40km/s şehir içi
         const sureText=sureDk>=60?Math.floor(sureDk/60)+"sa "+(sureDk%60)+"dk":sureDk+" dk";
         clearTimeout(timeout);
-        setMesafeHesap({km:yolMesafesi,sure:sureText,yukleniyor:false,hata:""});
+        const kmSayi=Number(yolMesafesi)||0;
+        setMesafeHesap({km:kmSayi,sure:sureText,yukleniyor:false,hata:""});
       }).catch(e=>{
         clearTimeout(timeout);
         setMesafeHesap({km:0,sure:"",yukleniyor:false,hata:"Adres bulunamadı. Örnek: Kadıköy, İstanbul"});
@@ -195,7 +200,7 @@ function PaketGonder({user,onClose}){
       <div style={{background:C.card,borderRadius:"14px",padding:"20px",border:"1px solid "+C.border,textAlign:"left",marginBottom:"20px"}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",fontSize:"12px"}}>
           <div style={{color:C.muted}}>Sipariş No:</div><div style={{fontWeight:"700"}}>#MT-{Math.floor(Math.random()*9000+1000)}</div>
-          <div style={{color:C.muted}}>Mesafe:</div><div style={{fontWeight:"700"}}>{mesafe} km {mesafeHesap.sure?"(~"+mesafeHesap.sure+")":""}</div>
+          <div style={{color:C.muted}}>Mesafe:</div><div style={{fontWeight:"700"}}>{Number(mesafe)||"?"} km {mesafeHesap.sure?"(~"+mesafeHesap.sure+")":""}</div>
           <div style={{color:C.muted}}>Tutar:</div><div style={{fontWeight:"700",color:C.accent}}>₺{fiyat}</div>
           <div style={{color:C.muted}}>Araç:</div><div style={{fontWeight:"700"}}>{kg<=15?"🏍️ Motorsiklet":"🚗 Araç/Kamyonet"}</div>
           <div style={{color:C.muted}}>Tahmini süre:</div><div style={{fontWeight:"700"}}>30–60 dk</div>
@@ -304,11 +309,15 @@ function PaketGonder({user,onClose}){
               <div style={{fontSize:"12px",fontWeight:"700",color:C.accent,marginBottom:"12px"}}>💰 FİYAT HESAPLAMA</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",fontSize:"12px",marginBottom:"12px"}}>
                 <div style={{color:C.muted}}>Gerçek mesafe:</div>
-                <div style={{fontWeight:"600",color:C.success}}>{mesafe} km {mesafeHesap.sure?"(~"+mesafeHesap.sure+")":""}</div>
+                <div style={{fontWeight:"600",color:C.success}}>{Number(mesafe)||"?"} km {mesafeHesap.sure?"(~"+mesafeHesap.sure+")":""}</div>
                 <div style={{color:C.muted}}>Efektif ağırlık:</div>
                 <div style={{fontWeight:"600"}}>{efKg.toFixed(1)} kg</div>
                 <div style={{color:C.muted}}>Araç türü:</div>
                 <div style={{fontWeight:"600"}}>{kg<=15?"🏍️ Motorsiklet":"🚗 Araç/Kamyonet"}</div>
+                <div style={{color:C.muted}}>Baz fiyat:</div>
+                <div style={{fontWeight:"600"}}>₺{bazFiyat}</div>
+                <div style={{color:C.muted}}>Mesafe ücreti:</div>
+                <div style={{fontWeight:"600"}}>₺{mesafeUcret} ({mesafe>0?Math.ceil(mesafeM/100):0} × ₺{PER_100M})</div>
                 <div style={{color:C.muted}}>Komisyon (%25):</div>
                 <div style={{fontWeight:"600",color:C.muted}}>₺{komisyon}</div>
                 <div style={{color:C.muted}}>Kurye kazancı:</div>
