@@ -99,7 +99,7 @@ function PaketGonder({user,onClose}){
   const PER_100M=2; // her 100 metrede ₺2 (değiştirilebilir)
   const birimSayisi=mesafe>0?Math.ceil(mesafeM/100):0;
   const mesafeUcret=birimSayisi*PER_100M;
-  const fiyat=efKg>0&&mesafe>0?ACILIS+mesafeUcret:0;
+  const fiyat=efKg>0&&mesafe>0?(mesafe<1?90:ACILIS+mesafeUcret):0;
   const komisyon=Math.ceil(fiyat*0.25);
   const kuryeKazanc=fiyat-komisyon;
 
@@ -134,11 +134,12 @@ function PaketGonder({user,onClose}){
           Math.sin(dLon/2)*Math.sin(dLon/2);
         const c=2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
         const kusUcusu=R*c;
-        const yolMesafesi=Math.ceil(kusUcusu*1.35); // yol katsayısı
-        const sureDk=Math.ceil(yolMesafesi*2.5); // ortalama 40km/s şehir içi
-        const sureText=sureDk>=60?Math.floor(sureDk/60)+"sa "+(sureDk%60)+"dk":sureDk+" dk";
+        // Kuş uçuşu 0.5 km altındaysa aynı bölge say - minimum 0 km
+        const yolHam=kusUcusu<0.5?0:Math.ceil(kusUcusu*1.35);
+        const sureDk=yolHam>0?Math.ceil(yolHam*2.5):0;
+        const sureText=sureDk>=60?Math.floor(sureDk/60)+"sa "+(sureDk%60)+"dk":sureDk>0?sureDk+" dk":"—";
         clearTimeout(timeout);
-        const kmSayi=Number(yolMesafesi)||0;
+        const kmSayi=Number(yolHam)||0;
         setMesafeHesap({km:kmSayi,sure:sureText,yukleniyor:false,hata:""});
       }).catch(e=>{
         clearTimeout(timeout);
