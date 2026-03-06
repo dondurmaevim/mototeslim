@@ -630,9 +630,9 @@ function GondericiModal({onClose, onSuccess}){
       const{data,error}=await sb.auth.signInWithPassword({email:form.email,password:form.sifre});
       if(error)throw error;
       const meta=data.user.user_metadata;
-      const{data:md}=await sb.from("musteriler").select("*").eq("user_id",data.user.id).single();
-      const adres=md?.adres||meta.adres||"";
-      const tel=md?.tel||meta.tel||"";
+      const{data:md}=await sb.from("musteriler").select("*").eq("user_id",data.user.id).maybeSingle();
+      const adres=(md?.adres)||meta.adres||"";
+      const tel=(md?.tel)||meta.tel||"";
       onSuccess({name:(meta.ad||"Kullanıcı")+" "+(meta.soyad||""),type:"uye",adres,tel},true);
     }catch(e){
       setAlert({type:"error",msg:e.message==="Invalid login credentials"?"E-posta veya şifre hatalı.":"Hata: "+e.message});
@@ -754,7 +754,7 @@ function KuryeDash({user,onLogout}){
       const{data:bek}=await sb.from("teslimatlar").select("*").eq("durum","bekliyor").order("created_at",{ascending:false});
       // Kurye'nin aktif siparişi
       const{data:{user:u}}=await sb.auth.getUser();
-      const{data:akt}=await sb.from("teslimatlar").select("*").eq("kurye_id",u.id).in("durum",["kabul_edildi","yolda"]).single();
+      const{data:akt}=await sb.from("teslimatlar").select("*").eq("kurye_id",u.id).in("durum",["kabul_edildi","yolda"]).maybeSingle();
       // Tamamlanan siparişler
       const{data:tam}=await sb.from("teslimatlar").select("*").eq("kurye_id",u.id).eq("durum","tamamlandi");
       
@@ -1038,7 +1038,7 @@ function App(){
         const rol=meta.rol==="kurye"?"kurye":"uye";
         let adres="",tel="";
         if(rol==="uye"){
-          const{data:musteriData}=await sb.from("musteriler").select("*").eq("user_id",session.user.id).single();
+          const{data:musteriData}=await sb.from("musteriler").select("*").eq("user_id",session.user.id).maybeSingle();
           adres=musteriData?.adres||meta.adres||"";
           tel=musteriData?.tel||meta.tel||"";
         }
