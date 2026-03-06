@@ -107,25 +107,36 @@ function PaketGonder({user,onClose}){
       setMesafeHesap({km:0,sure:"",yukleniyor:false,hata:"Bağlantı zaman aşımı. Lütfen tekrar deneyin."});
     },10000);
     try{
-      if(typeof google==="undefined"||!google.maps){
+      // Önce adresleri koordinata çevir (Geocoding), sonra mesafeyi hesapla
+      const geocoder=new google.maps.Geocoder();
+      const geocode=(adres)=>new Promise((resolve,reject)=>{
+        geocoder.geocode({address:adres+", Türkiye"},(results,status)=>{
+          if(status==="OK"&&results[0]){
+            resolve(results[0].geometry.location);
+          }else{
+            reject(new Error("Adres bulunamadı: "+adres));
+          }
+        });
+      });
+
+      Promise.all([geocode(gonAdres),geocode(alAdres)]).then(([gonLoc,alLoc])=>{
+        // İki nokta arası kuş uçuşu mesafeyi hesapla, sonra 1.3 çarpanıyla yol mesafesine çevir
+        const R=6371;
+        const dLat=(alLoc.lat()-gonLoc.lat())*Math.PI/180;
+        const dLon=(alLoc.lng()-gonLoc.lng())*Math.PI/180;
+        const a=Math.sin(dLat/2)*Math.sin(dLat/2)+
+          Math.cos(gonLoc.lat()*Math.PI/180)*Math.cos(alLoc.lat()*Math.PI/180)*
+          Math.sin(dLon/2)*Math.sin(dLon/2);
+        const c=2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+        const kusUcusu=R*c;
+        const yolMesafesi=Math.ceil(kusUcusu*1.35); // yol katsayısı
+        const sureDk=Math.ceil(yolMesafesi*2.5); // ortalama 40km/s şehir içi
+        const sureText=sureDk>=60?Math.floor(sureDk/60)+"sa "+(sureDk%60)+"dk":sureDk+" dk";
         clearTimeout(timeout);
-        setMesafeHesap({km:0,sure:"",yukleniyor:false,hata:"Google Maps yüklenemedi."});
-        return;
-      }
-      const service=new google.maps.DistanceMatrixService();
-      service.getDistanceMatrix({
-        origins:[gonAdres+", Türkiye"],
-        destinations:[alAdres+", Türkiye"],
-        travelMode:google.maps.TravelMode.DRIVING,
-        unitSystem:google.maps.UnitSystem.METRIC,
-      },(response,status)=>{
+        setMesafeHesap({km:yolMesafesi,sure:sureText,yukleniyor:false,hata:""});
+      }).catch(e=>{
         clearTimeout(timeout);
-        if(status==="OK"&&response.rows[0].elements[0].status==="OK"){
-          const el=response.rows[0].elements[0];
-          setMesafeHesap({km:Math.ceil(el.distance.value/1000),sure:el.duration.text,yukleniyor:false,hata:""});
-        }else{
-          setMesafeHesap({km:0,sure:"",yukleniyor:false,hata:"Adres bulunamadı. Örnek: Kadıköy, İstanbul"});
-        }
+        setMesafeHesap({km:0,sure:"",yukleniyor:false,hata:"Adres bulunamadı. Örnek: Kadıköy, İstanbul"});
       });
     }catch(e){
       clearTimeout(timeout);
