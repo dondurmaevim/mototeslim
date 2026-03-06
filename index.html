@@ -95,10 +95,11 @@ function PaketGonder({user,onClose}){
   const efKg=kg>20&&desi>0?Math.max(kg,desi):kg;
   const mesafe=mesafeHesap.km||0;
   const mesafeM=mesafe*1000; // km → metre
-  const PER_100M=3; // her 100 metrede ₺3 (değiştirilebilir)
-  const bazFiyat=efKg<=5?40:efKg<=15?70:efKg<=30?110:efKg<=60?180:280;
-  const mesafeUcret=Math.ceil((mesafeM/100)*PER_100M);
-  const fiyat=efKg>0&&mesafe>0?bazFiyat+mesafeUcret:0;
+  const ACILIS=70;  // sabit açılış ücreti ₺70
+  const PER_100M=2; // her 100 metrede ₺2 (değiştirilebilir)
+  const birimSayisi=mesafe>0?Math.ceil(mesafeM/100):0;
+  const mesafeUcret=birimSayisi*PER_100M;
+  const fiyat=efKg>0&&mesafe>0?ACILIS+mesafeUcret:0;
   const komisyon=Math.ceil(fiyat*0.25);
   const kuryeKazanc=fiyat-komisyon;
 
@@ -314,10 +315,10 @@ function PaketGonder({user,onClose}){
                 <div style={{fontWeight:"600"}}>{efKg.toFixed(1)} kg</div>
                 <div style={{color:C.muted}}>Araç türü:</div>
                 <div style={{fontWeight:"600"}}>{kg<=15?"🏍️ Motorsiklet":"🚗 Araç/Kamyonet"}</div>
-                <div style={{color:C.muted}}>Baz fiyat:</div>
-                <div style={{fontWeight:"600"}}>₺{bazFiyat}</div>
+                <div style={{color:C.muted}}>Açılış ücreti:</div>
+                <div style={{fontWeight:"600"}}>₺{ACILIS}</div>
                 <div style={{color:C.muted}}>Mesafe ücreti:</div>
-                <div style={{fontWeight:"600"}}>₺{mesafeUcret} ({mesafe>0?Math.ceil(mesafeM/100):0} × ₺{PER_100M})</div>
+                <div style={{fontWeight:"600"}}>₺{mesafeUcret} ({mesafe>0?birimSayisi:0} × ₺{PER_100M})</div>
                 <div style={{color:C.muted}}>Komisyon (%25):</div>
                 <div style={{fontWeight:"600",color:C.muted}}>₺{komisyon}</div>
                 <div style={{color:C.muted}}>Kurye kazancı:</div>
