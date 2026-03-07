@@ -571,6 +571,59 @@ function KuryeKayit({onClose, onSuccess}){
 /* ══════════════════════════════════════════════
    KURYE GİRİŞ
 ══════════════════════════════════════════════ */
+function SifreUnuttum(){
+  const[acik,setAcik]=useState(false);
+  const[email,setEmail]=useState("");
+  const[loading,setLoading]=useState(false);
+  const[alert,setAlert]=useState({type:"",msg:""});
+
+  const gonder=async()=>{
+    if(!email.trim()){setAlert({type:"error",msg:"E-posta adresi zorunludur."});return;}
+    setLoading(true);setAlert({type:"",msg:""});
+    try{
+      const{error}=await sb.auth.resetPasswordForEmail(email,{
+        redirectTo:window.location.origin+"?reset=true"
+      });
+      if(error)throw error;
+      setAlert({type:"success",msg:"✓ Şifre sıfırlama bağlantısı e-postana gönderildi!"});
+      setTimeout(()=>setAcik(false),3000);
+    }catch(e){
+      setAlert({type:"error",msg:"Hata: "+e.message});
+    }
+    setLoading(false);
+  };
+
+  return(
+    <div style={{marginTop:"12px"}}>
+      {!acik?(
+        <div style={{textAlign:"center"}}>
+          <span onClick={()=>setAcik(true)} style={{fontSize:"12px",color:C.muted,cursor:"pointer",textDecoration:"underline"}}>
+            Şifremi unuttum
+          </span>
+        </div>
+      ):(
+        <div style={{background:"rgba(30,58,96,0.3)",border:"1px solid "+C.navy,borderRadius:"12px",padding:"16px",marginTop:"8px"}} className="fade">
+          <div style={{fontSize:"13px",fontWeight:"700",marginBottom:"10px"}}>🔑 Şifre Sıfırla</div>
+          <div style={{fontSize:"12px",color:C.muted,marginBottom:"12px"}}>E-posta adresine şifre sıfırlama bağlantısı göndereceğiz.</div>
+          <input type="email" placeholder="E-posta adresin" value={email} onChange={e=>setEmail(e.target.value)}
+            style={{width:"100%",padding:"10px 13px",borderRadius:"9px",border:"1px solid "+C.inBorder,background:C.inBg,color:C.text,fontSize:"13px",outline:"none",boxSizing:"border-box",marginBottom:"10px"}}/>
+          {alert.msg&&(
+            <div style={{background:alert.type==="error"?"rgba(239,68,68,0.1)":"rgba(34,197,94,0.1)",border:"1px solid "+(alert.type==="error"?"rgba(239,68,68,0.3)":"rgba(34,197,94,0.3)"),borderRadius:"8px",padding:"8px 12px",fontSize:"11px",color:alert.type==="error"?C.error:C.success,marginBottom:"10px"}}>
+              {alert.msg}
+            </div>
+          )}
+          <div style={{display:"flex",gap:"8px"}}>
+            <button onClick={()=>{setAcik(false);setEmail("");setAlert({type:"",msg:""}); }} style={{...btnS,flex:"none",padding:"8px 14px",fontSize:"12px"}}>İptal</button>
+            <button onClick={gonder} disabled={loading} style={{...btnP,flex:1,padding:"9px",fontSize:"12px",boxShadow:"none",opacity:loading?0.7:1}}>
+              {loading?<span className="spin">⏳</span>:"Gönder"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function KuryeGiris({onClose, onSuccess}){
   const[form,setForm]=useState({email:"",sifre:""});
   const[loading,setLoading]=useState(false);
@@ -604,6 +657,7 @@ function KuryeGiris({onClose, onSuccess}){
           style={{...btnP,width:"100%",marginTop:"18px",boxShadow:"none",opacity:loading?0.7:1}}>
           {loading?<span className="spin">⏳</span>:"Giriş Yap"}
         </button>
+        <SifreUnuttum/>
         <div style={{textAlign:"center",marginTop:"14px",fontSize:"12px",color:C.muted}}>
           Hesabın yok mu? <span onClick={onClose} style={{color:C.accent,cursor:"pointer",fontWeight:"700"}}>Kurye ol →</span>
         </div>
@@ -696,6 +750,7 @@ function GondericiModal({onClose, onSuccess}){
           <button onClick={giris} disabled={loading} style={{...btnP,width:"100%",marginTop:"16px",boxShadow:"none",opacity:loading?0.7:1}}>
             {loading?<span className="spin">⏳</span>:"Giriş Yap"}
           </button>
+          <SifreUnuttum/>
         </>)}
 
         {tab==="kayit"&&(<>
