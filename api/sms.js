@@ -1,7 +1,7 @@
 // Vercel Serverless Function - /api/sms
 // Bu dosyayı GitHub'da /api/sms.js olarak yükle
 
-module.exports = async function handler handler(req, res) {
+module.exports = async function handler (req, res) {
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
