@@ -1,36 +1,39 @@
-// Vercel Serverless Function - /api/sms
-// Bu dosyayı GitHub'da /api/sms.js olarak yükle
-
-module.exports = async function handler (req, res) {
-  // CORS
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Yönteme izin verilmiyor' });
 
-  const { telefon, mesaj } = req.body;
-  if (!telefon || !mesaj) return res.status(400).json({ error: 'telefon ve mesaj zorunlu' });
+  let body = req.body;
+  if (typeof body === 'string') {
+    try { body = JSON.parse(body); } catch(e) { body = {}; }
+  }
+  if (!body) body = {};
 
-  // Telefonu formatla (başındaki 0'ı kaldır)
-  const tel = telefon.replace(/\D/g, '').replace(/^0/, '');
+  const telefon = body.telefon;
+  const mesaj = body.mesaj;
+  
+  if (!telefon || !mesaj) {
+    return res.status(400).json({ error: 'telefon ve mesaj zorunlu', alınan: body });
+  }
+
+  const tel = String(telefon).replace(/\D/g, '').replace(/^0/, '');
 
   try {
-    const params = new URLSearchParams({
+    const url = 'https://api.netgsm.com.tr/sms/send/get/?' + new URLSearchParams({
       usercode: '2589110752',
       password: 'Karakoc11.',
       gsmno: tel,
       message: mesaj,
       msgheader: 'cofnaturele',
       dil: 'TR:1',
-    });
+    }).toString();
 
-    const response = await fetch('https://api.netgsm.com.tr/sms/send/get/?' + params.toString());
+    const response = await fetch(url);
     const text = await response.text();
-
-    // Netgsm başarı kodları: 00, 01, 02
     const basarili = text.startsWith('00') || text.startsWith('01') || text.startsWith('02');
-    
+
     if (basarili) {
       res.status(200).json({ success: true, kod: text.trim() });
     } else {
