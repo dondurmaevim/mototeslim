@@ -1077,6 +1077,251 @@ function GecmisTeslimatlar({userId}){
 }
 
 /* ══════════════════════════════════════════════
+   ADMIN PANELİ
+══════════════════════════════════════════════ */
+const ADMIN_SIFRE = "mototeslim2024"; // değiştirilebilir
+
+function AdminPanel(){
+  const[giris,setGiris]=useState(false);
+  const[sifre,setSifre]=useState("");
+  const[hata,setHata]=useState("");
+  const[tab,setTab]=useState("istatistik");
+  const[data,setData]=useState({siparisler:[],kuryeler:[],musteriler:[]});
+  const[loading,setLoading]=useState(true);
+
+  useEffect(()=>{
+    const s=sessionStorage.getItem("admin_giris");
+    if(s==="1")setGiris(true);
+  },[]);
+
+  useEffect(()=>{
+    if(giris)yukle();
+  },[giris]);
+
+  const yukle=async()=>{
+    setLoading(true);
+    const[{data:sip},{data:kur},{data:mus}]=await Promise.all([
+      sb.from("teslimatlar").select("*").order("created_at",{ascending:false}),
+      sb.from("kuryeler").select("*").order("created_at",{ascending:false}),
+      sb.from("musteriler").select("*").order("created_at",{ascending:false}),
+    ]);
+    setData({siparisler:sip||[],kuryeler:kur||[],musteriler:mus||[]});
+    setLoading(false);
+  };
+
+  const girisYap=()=>{
+    if(sifre===ADMIN_SIFRE){
+      sessionStorage.setItem("admin_giris","1");
+      setGiris(true);setHata("");
+    }else{setHata("Şifre hatalı!");}
+  };
+
+  const siparisDurumDegistir=async(id,durum)=>{
+    await sb.from("teslimatlar").update({durum}).eq("id",id);
+    yukle();
+  };
+
+  const kurye_durumDegistir=async(id,durum)=>{
+    await sb.from("kuryeler").update({durum}).eq("id",id);
+    yukle();
+  };
+
+  if(!giris)return(
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
+      <div style={{width:"100%",maxWidth:"360px",background:C.card,border:"1px solid "+C.border,borderRadius:"18px",padding:"32px"}} className="fade">
+        <div style={{textAlign:"center",marginBottom:"24px"}}>
+          <div style={{fontSize:"36px",marginBottom:"8px"}}>🔐</div>
+          <div style={{fontSize:"20px",fontWeight:"800"}}>Admin Girişi</div>
+          <div style={{fontSize:"12px",color:C.muted,marginTop:"4px"}}>MotoTeslim Yönetim Paneli</div>
+        </div>
+        <input type="password" placeholder="Admin şifresi" value={sifre}
+          onChange={e=>setSifre(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&girisYap()}
+          style={{width:"100%",padding:"12px 14px",borderRadius:"10px",border:"1px solid "+C.inBorder,background:C.inBg,color:C.text,fontSize:"14px",outline:"none",boxSizing:"border-box",marginBottom:"12px"}}/>
+        {hata&&<div style={{color:C.error,fontSize:"12px",marginBottom:"10px"}}>⚠️ {hata}</div>}
+        <button onClick={girisYap} style={{...btnP,width:"100%",boxShadow:"none"}}>Giriş Yap</button>
+        <div style={{textAlign:"center",marginTop:"14px"}}>
+          <a href="/" style={{fontSize:"12px",color:C.muted}}>← Ana sayfaya dön</a>
+        </div>
+      </div>
+    </div>
+  );
+
+  // İstatistikler
+  const tamam=data.siparisler.filter(s=>s.durum==="tamamlandi");
+  const bekliyor=data.siparisler.filter(s=>s.durum==="bekliyor");
+  const yolda=data.siparisler.filter(s=>s.durum==="yolda"||s.durum==="kabul_edildi");
+  const toplamCiro=tamam.reduce((s,x)=>s+(x.fiyat||0),0);
+  const toplamKomisyon=Math.ceil(toplamCiro*0.25);
+  const bugun=new Date().toDateString();
+  const bugunSip=tamam.filter(s=>new Date(s.created_at).toDateString()===bugun);
+  const bugunCiro=bugunSip.reduce((s,x)=>s+(x.fiyat||0),0);
+
+  return(
+    <div style={{minHeight:"100vh",background:C.bg}}>
+      {/* Header */}
+      <div style={{background:C.card,borderBottom:"1px solid "+C.border,padding:"14px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100}}>
+        <div style={{display:"flex",alignItems:"center",gap:"12px"}}>
+          <div style={{fontSize:"20px"}}>🏍️</div>
+          <div>
+            <div style={{fontSize:"15px",fontWeight:"800"}}>MotoTeslim Admin</div>
+            <div style={{fontSize:"11px",color:C.muted}}>Yönetim Paneli</div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
+          <button onClick={yukle} style={{...btnS,fontSize:"12px",padding:"6px 12px"}}>🔄 Yenile</button>
+          <button onClick={()=>{sessionStorage.removeItem("admin_giris");setGiris(false);}} style={{...btnS,fontSize:"12px",padding:"6px 12px"}}>Çıkış</button>
+        </div>
+      </div>
+
+      <div style={{maxWidth:"1100px",margin:"0 auto",padding:"24px 20px"}}>
+        {/* Tabs */}
+        <div style={{display:"flex",gap:"6px",marginBottom:"24px",background:C.inBg,borderRadius:"12px",padding:"4px",overflowX:"auto"}}>
+          {[["istatistik","📊 İstatistik"],["siparisler","📦 Siparişler"],["kuryeler","🏍️ Kuryeler"],["musteriler","👤 Müşteriler"]].map(([v,l])=>(
+            <button key={v} onClick={()=>setTab(v)} style={{flex:1,minWidth:"120px",padding:"9px 14px",borderRadius:"8px",border:"none",background:tab===v?C.accent:"transparent",color:tab===v?"#fff":C.muted,fontSize:"12px",fontWeight:"700",cursor:"pointer",whiteSpace:"nowrap"}}>
+              {l}
+            </button>
+          ))}
+        </div>
+
+        {loading&&<div style={{textAlign:"center",color:C.muted,padding:"60px",fontSize:"14px"}}>⏳ Yükleniyor...</div>}
+
+        {/* İstatistik */}
+        {!loading&&tab==="istatistik"&&(
+          <div className="fade">
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:"14px",marginBottom:"24px"}}>
+              {[
+                {l:"Toplam Sipariş",v:data.siparisler.length,s:"Tüm zamanlar",c:C.accent},
+                {l:"Tamamlanan",v:tamam.length,s:"Başarılı teslimat",c:C.success},
+                {l:"Bekleyen",v:bekliyor.length,s:"Kurye atanmadı",c:"#f59e0b"},
+                {l:"Yolda",v:yolda.length,s:"Aktif teslimat",c:"#3b82f6"},
+                {l:"Toplam Ciro",v:"₺"+Math.ceil(toplamCiro),s:"Tüm zamanlar",c:C.accent},
+                {l:"Toplam Komisyon",v:"₺"+toplamKomisyon,s:"%25 platform payı",c:C.success},
+                {l:"Bugün Ciro",v:"₺"+Math.ceil(bugunCiro),s:bugunSip.length+" sipariş",c:"#3b82f6"},
+                {l:"Toplam Kurye",v:data.kuryeler.length,s:data.kuryeler.filter(k=>k.durum==="aktif").length+" aktif",c:C.muted},
+              ].map(x=>(
+                <div key={x.l} style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"18px"}}>
+                  <div style={{fontSize:"11px",color:C.muted,fontWeight:"600",marginBottom:"6px"}}>{x.l}</div>
+                  <div style={{fontSize:"24px",fontWeight:"900",color:x.c}}>{x.v}</div>
+                  <div style={{fontSize:"11px",color:C.dim,marginTop:"4px"}}>{x.s}</div>
+                </div>
+              ))}
+            </div>
+            {/* Son 5 sipariş */}
+            <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"20px"}}>
+              <div style={{fontSize:"13px",fontWeight:"700",marginBottom:"14px"}}>📋 Son Siparişler</div>
+              {data.siparisler.slice(0,5).map(s=>(
+                <div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid "+C.border}}>
+                  <div>
+                    <div style={{fontSize:"12px",fontWeight:"600"}}>{s.gon_adres} → {s.al_adres}</div>
+                    <div style={{fontSize:"11px",color:C.muted,marginTop:"2px"}}>{new Date(s.created_at).toLocaleString("tr-TR")}</div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:"13px",fontWeight:"800",color:C.accent}}>₺{s.fiyat||0}</div>
+                    <div style={{fontSize:"10px",marginTop:"2px",padding:"2px 7px",borderRadius:"5px",background:s.durum==="tamamlandi"?"rgba(34,197,94,0.15)":s.durum==="bekliyor"?"rgba(245,158,11,0.15)":"rgba(59,130,246,0.15)",color:s.durum==="tamamlandi"?C.success:s.durum==="bekliyor"?"#f59e0b":"#3b82f6",fontWeight:"700"}}>{s.durum}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Siparişler */}
+        {!loading&&tab==="siparisler"&&(
+          <div className="fade">
+            {data.siparisler.length===0&&<div style={{textAlign:"center",color:C.muted,padding:"40px"}}>Henüz sipariş yok.</div>}
+            {data.siparisler.map(s=>(
+              <div key={s.id} style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"16px",marginBottom:"12px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"12px"}}>
+                  <div>
+                    <div style={{fontSize:"11px",color:C.dim}}>#{s.id.slice(-8).toUpperCase()}</div>
+                    <div style={{fontSize:"11px",color:C.muted,marginTop:"2px"}}>{new Date(s.created_at).toLocaleString("tr-TR")}</div>
+                  </div>
+                  <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+                    <span style={{fontSize:"11px",padding:"3px 8px",borderRadius:"6px",fontWeight:"700",background:s.durum==="tamamlandi"?"rgba(34,197,94,0.15)":s.durum==="bekliyor"?"rgba(245,158,11,0.15)":"rgba(59,130,246,0.15)",color:s.durum==="tamamlandi"?C.success:s.durum==="bekliyor"?"#f59e0b":"#3b82f6"}}>{s.durum}</span>
+                    <span style={{fontSize:"14px",fontWeight:"900",color:C.accent}}>₺{s.fiyat||0}</span>
+                  </div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",fontSize:"12px",marginBottom:"12px"}}>
+                  <div style={{background:"rgba(232,80,10,0.07)",borderRadius:"8px",padding:"10px"}}>
+                    <div style={{color:C.accent,fontWeight:"700",fontSize:"10px",marginBottom:"3px"}}>📤 GÖNDERİCİ</div>
+                    <div style={{fontWeight:"600"}}>{s.gon_ad}</div>
+                    <div style={{color:C.muted}}>{s.gon_tel}</div>
+                    <div style={{color:C.muted,fontSize:"11px"}}>{s.gon_adres}</div>
+                  </div>
+                  <div style={{background:"rgba(34,197,94,0.07)",borderRadius:"8px",padding:"10px"}}>
+                    <div style={{color:C.success,fontWeight:"700",fontSize:"10px",marginBottom:"3px"}}>📥 ALICI</div>
+                    <div style={{fontWeight:"600"}}>{s.al_ad}</div>
+                    <div style={{color:C.muted}}>{s.al_tel}</div>
+                    <div style={{color:C.muted,fontSize:"11px"}}>{s.al_adres}</div>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
+                  <span style={{fontSize:"11px",background:C.accentGlow,border:"1px solid "+C.accent,borderRadius:"6px",padding:"3px 8px",color:C.accent}}>{s.agirlik||"—"} kg</span>
+                  <span style={{fontSize:"11px",background:"rgba(30,58,96,0.3)",border:"1px solid "+C.border,borderRadius:"6px",padding:"3px 8px",color:C.muted}}>{s.mesafe||"—"} km</span>
+                  <span style={{fontSize:"11px",background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.2)",borderRadius:"6px",padding:"3px 8px",color:C.success}}>Komisyon: ₺{Math.ceil((s.fiyat||0)*0.25)}</span>
+                  {s.durum!=="tamamlandi"&&s.durum!=="iptal"&&(
+                    <button onClick={()=>siparisDurumDegistir(s.id,"iptal")} style={{fontSize:"11px",background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:"6px",padding:"3px 8px",color:C.error,cursor:"pointer",marginLeft:"auto"}}>
+                      ✕ İptal Et
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Kuryeler */}
+        {!loading&&tab==="kuryeler"&&(
+          <div className="fade">
+            {data.kuryeler.length===0&&<div style={{textAlign:"center",color:C.muted,padding:"40px"}}>Henüz kayıtlı kurye yok.</div>}
+            {data.kuryeler.map(k=>(
+              <div key={k.id} style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"16px",marginBottom:"12px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:"14px",fontWeight:"700"}}>{k.ad} {k.soyad}</div>
+                    <div style={{fontSize:"12px",color:C.muted,marginTop:"3px"}}>{k.tel}</div>
+                    <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginTop:"8px"}}>
+                      <span style={{fontSize:"11px",background:"rgba(30,58,96,0.3)",border:"1px solid "+C.border,borderRadius:"6px",padding:"3px 8px",color:C.muted}}>{k.arac_turu||"—"}</span>
+                      {k.plaka&&<span style={{fontSize:"11px",background:"rgba(30,58,96,0.3)",border:"1px solid "+C.border,borderRadius:"6px",padding:"3px 8px",color:C.muted}}>{k.plaka}</span>}
+                      <span style={{fontSize:"11px",padding:"3px 8px",borderRadius:"6px",fontWeight:"700",background:k.durum==="aktif"?"rgba(34,197,94,0.15)":"rgba(245,158,11,0.15)",color:k.durum==="aktif"?C.success:"#f59e0b"}}>{k.durum||"beklemede"}</span>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:"6px",marginLeft:"12px"}}>
+                    {k.durum!=="aktif"&&<button onClick={()=>kurye_durumDegistir(k.id,"aktif")} style={{fontSize:"11px",background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.3)",borderRadius:"7px",padding:"6px 12px",color:C.success,cursor:"pointer",fontWeight:"700"}}>✓ Onayla</button>}
+                    {k.durum==="aktif"&&<button onClick={()=>kurye_durumDegistir(k.id,"pasif")} style={{fontSize:"11px",background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:"7px",padding:"6px 12px",color:C.error,cursor:"pointer",fontWeight:"700"}}>Askıya Al</button>}
+                    {k.durum==="pasif"&&<button onClick={()=>kurye_durumDegistir(k.id,"aktif")} style={{fontSize:"11px",background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.3)",borderRadius:"7px",padding:"6px 12px",color:C.success,cursor:"pointer",fontWeight:"700"}}>Aktifleştir</button>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Müşteriler */}
+        {!loading&&tab==="musteriler"&&(
+          <div className="fade">
+            {data.musteriler.length===0&&<div style={{textAlign:"center",color:C.muted,padding:"40px"}}>Henüz kayıtlı müşteri yok.</div>}
+            {data.musteriler.map(m=>(
+              <div key={m.id} style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"16px",marginBottom:"12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontSize:"13px",fontWeight:"700"}}>{m.ad} {m.soyad}</div>
+                  <div style={{fontSize:"12px",color:C.muted,marginTop:"3px"}}>{m.tel}</div>
+                  <div style={{fontSize:"11px",color:C.dim,marginTop:"3px"}}>{m.adres}</div>
+                </div>
+                <div style={{textAlign:"right",fontSize:"11px",color:C.dim}}>
+                  {new Date(m.created_at).toLocaleDateString("tr-TR")}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
    ANA UYGULAMA
 ══════════════════════════════════════════════ */
 function SifreDegistir(){
@@ -1157,6 +1402,7 @@ function App(){
   const logout=async()=>{await sb.auth.signOut();setUser(null);setOk(false);};
 
   if(sifreSifirla)return <SifreDegistir/>;
+  if(window.location.pathname==='/admin'||window.location.search.includes('page=admin'))return <AdminPanel/>;
   if(!authChecked)return(
     <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{textAlign:"center"}}>
