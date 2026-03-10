@@ -1,3 +1,6 @@
+// Vercel Serverless Function - /api/sms.js
+// Netgsm SMS gönderimi - XML API
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -18,36 +21,66 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: 'telefon ve mesaj zorunlu' });
   }
 
-  const tel = String(telefon).replace(/\D/g, '').replace(/^0/, '');
+  const tel = String(telefon).replace(/\D/g, '').replace(/^90/, '').replace(/^0/, '');
+
+  const temizMesaj = mesaj
+    .replace(/ğ/g,'g').replace(/Ğ/g,'G')
+    .replace(/ü/g,'u').replace(/Ü/g,'U')
+    .replace(/ş/g,'s').replace(/Ş/g,'S')
+    .replace(/ı/g,'i').replace(/İ/g,'I')
+    .replace(/ö/g,'o').replace(/Ö/g,'O')
+    .replace(/ç/g,'c').replace(/Ç/g,'C');
+
+  const USERCODE  = '2589110752';
+  const PASSWORD  = 'Karakoc72.';
+  const MSGHEADER = 'dondurmaevi';
 
   try {
-    // Türkçe karakterleri değiştir
-    const temizMesaj = mesaj
-      .replace(/ğ/g,'g').replace(/Ğ/g,'G')
-      .replace(/ü/g,'u').replace(/Ü/g,'U')
-      .replace(/ş/g,'s').replace(/Ş/g,'S')
-      .replace(/ı/g,'i').replace(/İ/g,'I')
-      .replace(/ö/g,'o').replace(/Ö/g,'O')
-      .replace(/ç/g,'c').replace(/Ç/g,'C');
+    const xmlBody = `<?xml version="1.0" encoding="UTF-8"?>
+<mainbody>
+  <header>
+    <usercode>${USERCODE}</usercode>
+    <password>${PASSWORD}</password>
+    <msgheader>${MSGHEADER}</msgheader>
+  </header>
+  <body>
+    <msg><![CDATA[${temizMesaj}]]></msg>
+    <no>${tel}</no>
+  </body>
+</mainbody>`;
 
-    const url = 'https://api.netgsm.com.tr/sms/send/get/?' + new URLSearchParams({
-      usercode: '2589110752',
-      password: 'Karakoc11.',
-      gsmno: tel,
-      message: temizMesaj,
-      msgheader: 'cofnaturele',
-    }).toString();
+    const response = await fetch('https://api.netgsm.com.tr/sms/send/xml', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/xml; charset=UTF-8' },
+      body: xmlBody,
+    });
 
-    const response = await fetch(url);
     const text = await response.text();
-    const basarili = text.trim().startsWith('00') || text.trim().startsWith('01') || text.trim().startsWith('02');
+    console.log('Netgsm yanit:', text);
+    console.log('Gonderilen tel:', tel);
+    console.log('Mesaj:', temizMesaj);
+
+    const kod = text.trim().split(' ')[0];
+    const basarili = kod === '00' || kod === '01' || kod === '02';
 
     if (basarili) {
       res.status(200).json({ success: true, kod: text.trim() });
     } else {
-      res.status(400).json({ success: false, hata: text.trim() });
+      const hatalar = {
+        '20': 'Mesaj metni bos',
+        '30': 'Gecersiz kullanici adi/sifre veya IP izni yok',
+        '40': 'Mesaj basligi Netgsm panelinde tanimli degil',
+        '50': 'Yetersiz bakiye',
+        '51': 'Kontor yetersiz',
+        '70': 'Hatali sorgulama - eksik parametre',
+        '80': 'Mesaj gonderme limiti asildi',
+        '85': 'Operator kaynakli hata',
+      };
+      const aciklama = hatalar[kod] || `Bilinmeyen hata kodu: ${kod}`;
+      res.status(400).json({ success: false, hata: text.trim(), aciklama });
     }
   } catch (err) {
+    console.error('SMS hata:', err);
     res.status(500).json({ success: false, hata: err.message });
   }
-}
+};
