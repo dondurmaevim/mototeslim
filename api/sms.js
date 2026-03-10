@@ -1,5 +1,5 @@
 // Vercel Serverless Function - /api/sms.js
-// Netgsm SMS gönderimi - XML API
+// Netgsm SMS gönderimi - GET API
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -21,8 +21,10 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: 'telefon ve mesaj zorunlu' });
   }
 
+  // Telefonu formatla
   const tel = String(telefon).replace(/\D/g, '').replace(/^90/, '').replace(/^0/, '');
 
+  // Türkçe karakterleri temizle
   const temizMesaj = mesaj
     .replace(/ğ/g,'g').replace(/Ğ/g,'G')
     .replace(/ü/g,'u').replace(/Ü/g,'U')
@@ -36,28 +38,15 @@ module.exports = async function handler(req, res) {
   const MSGHEADER = 'dondurmaevi';
 
   try {
-    const xmlBody = `<?xml version="1.0" encoding="UTF-8"?>
-<mainbody>
-  <header>
-    <usercode>${USERCODE}</usercode>
-    <password>${PASSWORD}</password>
-    <msgheader>${MSGHEADER}</msgheader>
-  </header>
-  <body>
-    <msg><![CDATA[${temizMesaj}]]></msg>
-    <no>${tel}</no>
-  </body>
-</mainbody>`;
+    const url = `https://api.netgsm.com.tr/sms/send/get/?usercode=${USERCODE}&password=${PASSWORD}&gsmno=${tel}&message=${encodeURIComponent(temizMesaj)}&msgheader=${MSGHEADER}`;
 
-    const response = await fetch('https://api.netgsm.com.tr/sms/send/xml', {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/xml; charset=UTF-8' },
-      body: xmlBody,
-    });
+    console.log('Istek URL:', url);
 
+    const response = await fetch(url);
     const text = await response.text();
+
     console.log('Netgsm yanit:', text);
-    console.log('Gonderilen tel:', tel);
+    console.log('Tel:', tel);
     console.log('Mesaj:', temizMesaj);
 
     const kod = text.trim().split(' ')[0];
@@ -68,15 +57,15 @@ module.exports = async function handler(req, res) {
     } else {
       const hatalar = {
         '20': 'Mesaj metni bos',
-        '30': 'Gecersiz kullanici adi/sifre veya IP izni yok',
-        '40': 'Mesaj basligi Netgsm panelinde tanimli degil',
+        '30': 'Gecersiz kullanici adi veya sifre',
+        '40': 'Mesaj basligi tanimli degil',
         '50': 'Yetersiz bakiye',
         '51': 'Kontor yetersiz',
         '70': 'Hatali sorgulama - eksik parametre',
-        '80': 'Mesaj gonderme limiti asildi',
-        '85': 'Operator kaynakli hata',
+        '80': 'Limit asildi',
+        '85': 'Operator hatasi',
       };
-      const aciklama = hatalar[kod] || `Bilinmeyen hata kodu: ${kod}`;
+      const aciklama = hatalar[kod] || `Bilinmeyen hata: ${kod}`;
       res.status(400).json({ success: false, hata: text.trim(), aciklama });
     }
   } catch (err) {
