@@ -1120,6 +1120,19 @@ function AdminPanel(){
   const[aramaMetni,setAramaMetni]=useState("");
   const[aramaTipi,setAramaTipi]=useState("hepsi");
   const[aramaStok,setAramaStok]=useState(null);
+  const[ayarlar,setAyarlar]=useState({
+    moto_acilis:70,moto_100m:2,moto_sabit:90,
+    oto_acilis:90,oto_100m:5,
+    kamy_acilis:750,kamy_100m_kisa:22,kamy_km_uzun:23,kamy_sinir:10,
+    kamyon_acilis:1500,kamyon_100m_kisa:35,kamyon_km_uzun:45,kamyon_sinir:10,
+    ceza_moto:50,ceza_oto:50,ceza_kamy:250,ceza_kamyon:1500,
+    ceza_gelmeme_dk:15,ceza_teslimat_dk:60,
+    yakit_tazminat:30,
+    komisyon:25,
+    ref_kat1:5,ref_kat2:3,ref_kat3:1,ref_min_is:3,
+    moto_max_kg:15,oto_max_kg:250,kamy_max_kg:3000,kamyon_max_kg:27000,
+  });
+  const[ayarKayd,setAyarKayd]=useState(false);
 
   useEffect(()=>{
     const s=sessionStorage.getItem("admin_giris");
@@ -1133,6 +1146,15 @@ function AdminPanel(){
   const yukleOnayAyari=async()=>{
     const{data:ayar}=await sb.from("ayarlar").select("deger").eq("id","onay_sistemi").maybeSingle();
     setOnaySistemi(ayar?.deger==="true");
+    const{data:tumAyarlar}=await sb.from("ayarlar").select("id,deger");
+    if(tumAyarlar&&tumAyarlar.length>0){
+      const obj={};
+      tumAyarlar.forEach(a=>{
+        const v=parseFloat(a.deger);
+        obj[a.id]=isNaN(v)?a.deger:v;
+      });
+      setAyarlar(prev=>({...prev,...obj}));
+    }
   };
 
   const toggleOnaySistemi=async()=>{
@@ -1142,6 +1164,15 @@ function AdminPanel(){
     setOnaySistemi(yeni);
     setOnayYukleniyor(false);
   };
+
+  const ayarKaydet=async()=>{
+    setAyarKayd(true);
+    const rows=Object.entries(ayarlar).map(([id,deger])=>({id,deger:String(deger),guncelleme:new Date().toISOString()}));
+    await sb.from("ayarlar").upsert(rows);
+    setTimeout(()=>setAyarKayd(false),2000);
+  };
+
+  const setAyar=k=>e=>setAyarlar(prev=>({...prev,[k]:parseFloat(e.target.value)||0}));
 
   const yukle=async()=>{
     setLoading(true);
@@ -1336,7 +1367,7 @@ function AdminPanel(){
 
       <div style={{maxWidth:"1100px",margin:"0 auto",padding:"24px 20px"}}>
         <div style={{display:"flex",gap:"6px",marginBottom:"24px",background:C.inBg,borderRadius:"12px",padding:"4px",overflowX:"auto"}}>
-          {[["istatistik","📊 İstatistik"],["siparisler","📦 Siparişler"],["kuryeler","🏍️ Kuryeler"],["musteriler","👤 Müşteriler"],["arama","🔍 Arama"]].map(([v,l])=>(
+          {[["istatistik","📊 İstatistik"],["siparisler","📦 Siparişler"],["kuryeler","🏍️ Kuryeler"],["musteriler","👤 Müşteriler"],["arama","🔍 Arama"],["ayarlar","⚙️ Ayarlar"]].map(([v,l])=>(
             <button key={v} onClick={()=>setTab(v)} style={{flex:1,minWidth:"100px",padding:"9px 14px",borderRadius:"8px",border:"none",background:tab===v?C.accent:"transparent",color:tab===v?"#fff":C.muted,fontSize:"12px",fontWeight:"700",cursor:"pointer",whiteSpace:"nowrap"}}>
               {l}
             </button>
@@ -1492,6 +1523,118 @@ function AdminPanel(){
             )}
           </div>
         )}
+
+        {/* ⚙️ AYARLAR */}
+        {!loading&&tab==="ayarlar"&&(
+          <div className="fade">
+
+            {/* Yardımcı input */}
+            {(()=>{
+              const AI=({label,k,birim=""})=>(
+                <div style={{marginBottom:"12px"}}>
+                  <div style={{fontSize:"11px",color:C.muted,fontWeight:"600",marginBottom:"4px"}}>{label}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+                    <input type="number" value={ayarlar[k]} onChange={setAyar(k)}
+                      style={{flex:1,padding:"10px 12px",borderRadius:"8px",border:"1px solid "+C.inBorder,background:C.inBg,color:C.text,fontSize:"13px",outline:"none"}}/>
+                    {birim&&<span style={{fontSize:"12px",color:C.muted,whiteSpace:"nowrap"}}>{birim}</span>}
+                  </div>
+                </div>
+              );
+              const Baslik=({icon,title})=>(
+                <div style={{fontSize:"13px",fontWeight:"800",marginBottom:"14px",marginTop:"4px",display:"flex",alignItems:"center",gap:"8px"}}>
+                  <span>{icon}</span><span>{title}</span>
+                </div>
+              );
+              return(
+                <div>
+                  {/* Ağırlık Sınırları */}
+                  <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"20px",marginBottom:"14px"}}>
+                    <Baslik icon="⚖️" title="Ağırlık Sınırları (kg)"/>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
+                      <AI label="Motorsiklet max kg" k="moto_max_kg" birim="kg"/>
+                      <AI label="Otomobil max kg" k="oto_max_kg" birim="kg"/>
+                      <AI label="Kamyonet max kg" k="kamy_max_kg" birim="kg"/>
+                      <AI label="Kamyon/Tır max kg" k="kamyon_max_kg" birim="kg"/>
+                    </div>
+                  </div>
+
+                  {/* Motorsiklet */}
+                  <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"20px",marginBottom:"14px"}}>
+                    <Baslik icon="🛵" title="Motorsiklet Fiyatlandırma"/>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
+                      <AI label="Açılış ücreti" k="moto_acilis" birim="₺"/>
+                      <AI label="Her 100m ücreti" k="moto_100m" birim="₺"/>
+                      <AI label="1km altı sabit ücret" k="moto_sabit" birim="₺"/>
+                    </div>
+                  </div>
+
+                  {/* Otomobil */}
+                  <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"20px",marginBottom:"14px"}}>
+                    <Baslik icon="🚗" title="Otomobil Fiyatlandırma"/>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
+                      <AI label="Açılış ücreti" k="oto_acilis" birim="₺"/>
+                      <AI label="Her 100m ücreti" k="oto_100m" birim="₺"/>
+                    </div>
+                  </div>
+
+                  {/* Kamyonet */}
+                  <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"20px",marginBottom:"14px"}}>
+                    <Baslik icon="🚐" title="Kamyonet Fiyatlandırma"/>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
+                      <AI label="Açılış ücreti" k="kamy_acilis" birim="₺"/>
+                      <AI label="Kısa mesafe her 100m" k="kamy_100m_kisa" birim="₺"/>
+                      <AI label="Uzun mesafe km başı" k="kamy_km_uzun" birim="₺"/>
+                      <AI label="Kısa/uzun mesafe sınırı" k="kamy_sinir" birim="km"/>
+                    </div>
+                  </div>
+
+                  {/* Kamyon/Tır */}
+                  <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"20px",marginBottom:"14px"}}>
+                    <Baslik icon="🚛" title="Kamyon / Tır Fiyatlandırma"/>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
+                      <AI label="Açılış ücreti" k="kamyon_acilis" birim="₺"/>
+                      <AI label="Kısa mesafe her 100m" k="kamyon_100m_kisa" birim="₺"/>
+                      <AI label="Uzun mesafe km başı" k="kamyon_km_uzun" birim="₺"/>
+                      <AI label="Kısa/uzun mesafe sınırı" k="kamyon_sinir" birim="km"/>
+                    </div>
+                  </div>
+
+                  {/* Cezalar */}
+                  <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"20px",marginBottom:"14px"}}>
+                    <Baslik icon="⚠️" title="Ceza Tutarları"/>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
+                      <AI label="Motorsiklet cezası" k="ceza_moto" birim="₺"/>
+                      <AI label="Otomobil cezası" k="ceza_oto" birim="₺"/>
+                      <AI label="Kamyonet cezası" k="ceza_kamy" birim="₺"/>
+                      <AI label="Kamyon/Tır cezası" k="ceza_kamyon" birim="₺"/>
+                      <AI label="İşletmeye gelmeme süresi" k="ceza_gelmeme_dk" birim="dk"/>
+                      <AI label="Teslimat süre sınırı" k="ceza_teslimat_dk" birim="dk"/>
+                      <AI label="Başarısız teslimat (yakıt)" k="yakit_tazminat" birim="₺"/>
+                    </div>
+                  </div>
+
+                  {/* Komisyon & Referans */}
+                  <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"20px",marginBottom:"14px"}}>
+                    <Baslik icon="💸" title="Komisyon & Referans Sistemi"/>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
+                      <AI label="Platform komisyonu" k="komisyon" birim="%"/>
+                      <AI label="Min. iş şartı (davetçi)" k="ref_min_is" birim="iş"/>
+                      <AI label="1. katman prim" k="ref_kat1" birim="%"/>
+                      <AI label="2. katman prim" k="ref_kat2" birim="%"/>
+                      <AI label="3. katman prim" k="ref_kat3" birim="%"/>
+                    </div>
+                  </div>
+
+                  {/* Kaydet */}
+                  <button onClick={ayarKaydet} style={{...btnP,width:"100%",boxShadow:"none",fontSize:"14px",padding:"14px",marginBottom:"30px"}}>
+                    {ayarKayd?"✅ Ayarlar Kaydedildi!":"💾 Tüm Ayarları Kaydet"}
+                  </button>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
       </div>
     </div>
   );
