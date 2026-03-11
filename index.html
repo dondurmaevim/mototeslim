@@ -1632,9 +1632,7 @@ function AdminPanel(){
         )}
 
       </div>
-    </div>
-
-    {/* 👤 KİŞİ DETAY MODALI */}
+      {/* 👤 KİŞİ DETAY MODALI */}
     {seciliKisi&&(
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px"}} onClick={()=>setSeciliKisi(null)}>
         <div onClick={e=>e.stopPropagation()} style={{background:C.card,border:"1px solid "+C.border,borderRadius:"18px",padding:"24px",width:"100%",maxWidth:"520px",maxHeight:"85vh",overflowY:"auto"}} className="fade">
@@ -1726,6 +1724,7 @@ function AdminPanel(){
         </div>
       </div>
     )}
+    </div>
   );
 }
 
