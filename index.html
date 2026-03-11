@@ -1115,6 +1115,11 @@ function AdminPanel(){
   const[tab,setTab]=useState("istatistik");
   const[data,setData]=useState({siparisler:[],kuryeler:[],musteriler:[]});
   const[loading,setLoading]=useState(true);
+  const[onaySistemi,setOnaySistemi]=useState(false);
+  const[onayYukleniyor,setOnayYukleniyor]=useState(false);
+  const[aramaMetni,setAramaMetni]=useState("");
+  const[aramaTipi,setAramaTipi]=useState("hepsi");
+  const[aramaStok,setAramaStok]=useState(null);
 
   useEffect(()=>{
     const s=sessionStorage.getItem("admin_giris");
@@ -1122,8 +1127,21 @@ function AdminPanel(){
   },[]);
 
   useEffect(()=>{
-    if(giris)yukle();
+    if(giris){yukle();yukleOnayAyari();}
   },[giris]);
+
+  const yukleOnayAyari=async()=>{
+    const{data:ayar}=await sb.from("ayarlar").select("deger").eq("id","onay_sistemi").maybeSingle();
+    setOnaySistemi(ayar?.deger==="true");
+  };
+
+  const toggleOnaySistemi=async()=>{
+    setOnayYukleniyor(true);
+    const yeni=!onaySistemi;
+    await sb.from("ayarlar").upsert({id:"onay_sistemi",deger:String(yeni),guncelleme:new Date().toISOString()});
+    setOnaySistemi(yeni);
+    setOnayYukleniyor(false);
+  };
 
   const yukle=async()=>{
     setLoading(true);
@@ -1150,7 +1168,49 @@ function AdminPanel(){
 
   const kurye_durumDegistir=async(id,durum)=>{
     await sb.from("kuryeler").update({durum}).eq("id",id);
+    if(durum==="aktif"){
+      const{data:k}=await sb.from("kuryeler").select("tel,ad").eq("id",id).maybeSingle();
+      if(k?.tel) await smsSend(k.tel,"Merhaba "+k.ad+", MotoTeslim kurye basvurunuz onaylandi! Artik sisteme giris yapip siparis alabilirsiniz. mototeslim.com");
+    }
     yukle();
+  };
+
+  // Arama fonksiyonu
+  const aramaYap=()=>{
+    const q=aramaMetni.toLowerCase().trim();
+    if(!q){setAramaStok(null);return;}
+    const sonuc={siparisler:[],kuryeler:[],musteriler:[]};
+
+    if(aramaTipi==="hepsi"||aramaTipi==="siparis"){
+      sonuc.siparisler=data.siparisler.filter(s=>
+        (s.id||"").toLowerCase().includes(q)||
+        (s.gon_ad||"").toLowerCase().includes(q)||
+        (s.gon_tel||"").toLowerCase().includes(q)||
+        (s.gon_adres||"").toLowerCase().includes(q)||
+        (s.al_ad||"").toLowerCase().includes(q)||
+        (s.al_tel||"").toLowerCase().includes(q)||
+        (s.al_adres||"").toLowerCase().includes(q)
+      );
+    }
+    if(aramaTipi==="hepsi"||aramaTipi==="kurye"){
+      sonuc.kuryeler=data.kuryeler.filter(k=>
+        (k.ad+" "+k.soyad).toLowerCase().includes(q)||
+        (k.tel||"").toLowerCase().includes(q)||
+        (k.plaka||"").toLowerCase().includes(q)||
+        (k.arac_marka||"").toLowerCase().includes(q)||
+        (k.arac_model||"").toLowerCase().includes(q)||
+        (k.tc||"").toLowerCase().includes(q)
+      );
+    }
+    if(aramaTipi==="hepsi"||aramaTipi==="musteri"){
+      sonuc.musteriler=data.musteriler.filter(m=>
+        (m.ad+" "+m.soyad).toLowerCase().includes(q)||
+        (m.tel||"").toLowerCase().includes(q)||
+        (m.adres||"").toLowerCase().includes(q)||
+        (m.tc||"").toLowerCase().includes(q)
+      );
+    }
+    setAramaStok(sonuc);
   };
 
   if(!giris)return(
@@ -1184,9 +1244,82 @@ function AdminPanel(){
   const bugunSip=tamam.filter(s=>new Date(s.created_at).toDateString()===bugun);
   const bugunCiro=bugunSip.reduce((s,x)=>s+(x.fiyat||0),0);
 
+  const SiparisKart=({s})=>(
+    <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"16px",marginBottom:"12px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"12px"}}>
+        <div>
+          <div style={{fontSize:"11px",color:C.dim}}>#{s.id.slice(-8).toUpperCase()}</div>
+          <div style={{fontSize:"11px",color:C.muted,marginTop:"2px"}}>{new Date(s.created_at).toLocaleString("tr-TR")}</div>
+        </div>
+        <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+          <span style={{fontSize:"11px",padding:"3px 8px",borderRadius:"6px",fontWeight:"700",background:s.durum==="tamamlandi"?"rgba(34,197,94,0.15)":s.durum==="bekliyor"?"rgba(245,158,11,0.15)":"rgba(59,130,246,0.15)",color:s.durum==="tamamlandi"?C.success:s.durum==="bekliyor"?"#f59e0b":"#3b82f6"}}>{s.durum}</span>
+          <span style={{fontSize:"14px",fontWeight:"900",color:C.accent}}>₺{s.fiyat||0}</span>
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",fontSize:"12px",marginBottom:"12px"}}>
+        <div style={{background:"rgba(232,80,10,0.07)",borderRadius:"8px",padding:"10px"}}>
+          <div style={{color:C.accent,fontWeight:"700",fontSize:"10px",marginBottom:"3px"}}>📤 GÖNDERİCİ</div>
+          <div style={{fontWeight:"600"}}>{s.gon_ad}</div>
+          <div style={{color:C.muted}}>{s.gon_tel}</div>
+          <div style={{color:C.muted,fontSize:"11px"}}>{s.gon_adres}</div>
+        </div>
+        <div style={{background:"rgba(34,197,94,0.07)",borderRadius:"8px",padding:"10px"}}>
+          <div style={{color:C.success,fontWeight:"700",fontSize:"10px",marginBottom:"3px"}}>📥 ALICI</div>
+          <div style={{fontWeight:"600"}}>{s.al_ad}</div>
+          <div style={{color:C.muted}}>{s.al_tel}</div>
+          <div style={{color:C.muted,fontSize:"11px"}}>{s.al_adres}</div>
+        </div>
+      </div>
+      <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
+        <span style={{fontSize:"11px",background:C.accentGlow,border:"1px solid "+C.accent,borderRadius:"6px",padding:"3px 8px",color:C.accent}}>{s.agirlik||"—"} kg</span>
+        <span style={{fontSize:"11px",background:"rgba(30,58,96,0.3)",border:"1px solid "+C.border,borderRadius:"6px",padding:"3px 8px",color:C.muted}}>{s.mesafe||"—"} km</span>
+        <span style={{fontSize:"11px",background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.2)",borderRadius:"6px",padding:"3px 8px",color:C.success}}>Komisyon: ₺{Math.ceil((s.fiyat||0)*0.25)}</span>
+        {s.durum!=="tamamlandi"&&s.durum!=="iptal"&&(
+          <button onClick={()=>siparisDurumDegistir(s.id,"iptal")} style={{fontSize:"11px",background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:"6px",padding:"3px 8px",color:C.error,cursor:"pointer",marginLeft:"auto"}}>✕ İptal Et</button>
+        )}
+      </div>
+    </div>
+  );
+
+  const KuryeKart=({k})=>(
+    <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"16px",marginBottom:"12px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:"14px",fontWeight:"700"}}>{k.ad} {k.soyad}</div>
+          <div style={{fontSize:"12px",color:C.muted,marginTop:"3px"}}>{k.tel}</div>
+          {k.tc&&<div style={{fontSize:"11px",color:C.dim,marginTop:"2px"}}>TC: {k.tc}</div>}
+          <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginTop:"8px"}}>
+            <span style={{fontSize:"11px",background:"rgba(30,58,96,0.3)",border:"1px solid "+C.border,borderRadius:"6px",padding:"3px 8px",color:C.muted}}>{k.arac_turu||"—"}</span>
+            {k.arac_marka&&<span style={{fontSize:"11px",background:"rgba(30,58,96,0.3)",border:"1px solid "+C.border,borderRadius:"6px",padding:"3px 8px",color:C.muted}}>{k.arac_marka} {k.arac_model}</span>}
+            {k.plaka&&<span style={{fontSize:"11px",background:"rgba(59,130,246,0.15)",border:"1px solid rgba(59,130,246,0.3)",borderRadius:"6px",padding:"3px 8px",color:"#3b82f6",fontWeight:"700"}}>🚗 {k.plaka}</span>}
+            <span style={{fontSize:"11px",padding:"3px 8px",borderRadius:"6px",fontWeight:"700",background:k.durum==="aktif"?"rgba(34,197,94,0.15)":"rgba(245,158,11,0.15)",color:k.durum==="aktif"?C.success:"#f59e0b"}}>{k.durum||"beklemede"}</span>
+          </div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:"6px",marginLeft:"12px"}}>
+          {k.durum!=="aktif"&&<button onClick={()=>kurye_durumDegistir(k.id,"aktif")} style={{fontSize:"11px",background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.3)",borderRadius:"7px",padding:"6px 12px",color:C.success,cursor:"pointer",fontWeight:"700"}}>✓ Onayla</button>}
+          {k.durum==="aktif"&&<button onClick={()=>kurye_durumDegistir(k.id,"pasif")} style={{fontSize:"11px",background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:"7px",padding:"6px 12px",color:C.error,cursor:"pointer",fontWeight:"700"}}>Askıya Al</button>}
+          {k.durum==="pasif"&&<button onClick={()=>kurye_durumDegistir(k.id,"aktif")} style={{fontSize:"11px",background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.3)",borderRadius:"7px",padding:"6px 12px",color:C.success,cursor:"pointer",fontWeight:"700"}}>Aktifleştir</button>}
+        </div>
+      </div>
+    </div>
+  );
+
+  const MusteriKart=({m})=>(
+    <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"16px",marginBottom:"12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <div>
+        <div style={{fontSize:"13px",fontWeight:"700"}}>{m.ad} {m.soyad}</div>
+        <div style={{fontSize:"12px",color:C.muted,marginTop:"3px"}}>{m.tel}</div>
+        {m.tc&&<div style={{fontSize:"11px",color:C.dim,marginTop:"2px"}}>TC: {m.tc}</div>}
+        <div style={{fontSize:"11px",color:C.dim,marginTop:"3px"}}>{m.adres}</div>
+      </div>
+      <div style={{textAlign:"right",fontSize:"11px",color:C.dim}}>
+        {new Date(m.created_at).toLocaleDateString("tr-TR")}
+      </div>
+    </div>
+  );
+
   return(
     <div style={{minHeight:"100vh",background:C.bg}}>
-      {/* Header */}
       <div style={{background:C.card,borderBottom:"1px solid "+C.border,padding:"14px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100}}>
         <div style={{display:"flex",alignItems:"center",gap:"12px"}}>
           <div style={{fontSize:"20px"}}>🏍️</div>
@@ -1202,10 +1335,9 @@ function AdminPanel(){
       </div>
 
       <div style={{maxWidth:"1100px",margin:"0 auto",padding:"24px 20px"}}>
-        {/* Tabs */}
         <div style={{display:"flex",gap:"6px",marginBottom:"24px",background:C.inBg,borderRadius:"12px",padding:"4px",overflowX:"auto"}}>
-          {[["istatistik","📊 İstatistik"],["siparisler","📦 Siparişler"],["kuryeler","🏍️ Kuryeler"],["musteriler","👤 Müşteriler"]].map(([v,l])=>(
-            <button key={v} onClick={()=>setTab(v)} style={{flex:1,minWidth:"120px",padding:"9px 14px",borderRadius:"8px",border:"none",background:tab===v?C.accent:"transparent",color:tab===v?"#fff":C.muted,fontSize:"12px",fontWeight:"700",cursor:"pointer",whiteSpace:"nowrap"}}>
+          {[["istatistik","📊 İstatistik"],["siparisler","📦 Siparişler"],["kuryeler","🏍️ Kuryeler"],["musteriler","👤 Müşteriler"],["arama","🔍 Arama"]].map(([v,l])=>(
+            <button key={v} onClick={()=>setTab(v)} style={{flex:1,minWidth:"100px",padding:"9px 14px",borderRadius:"8px",border:"none",background:tab===v?C.accent:"transparent",color:tab===v?"#fff":C.muted,fontSize:"12px",fontWeight:"700",cursor:"pointer",whiteSpace:"nowrap"}}>
               {l}
             </button>
           ))}
@@ -1216,6 +1348,16 @@ function AdminPanel(){
         {/* İstatistik */}
         {!loading&&tab==="istatistik"&&(
           <div className="fade">
+            {/* Onay Sistemi Toggle */}
+            <div style={{background:C.card,border:"1px solid "+(onaySistemi?"rgba(232,80,10,0.5)":C.border),borderRadius:"13px",padding:"18px 20px",marginBottom:"20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <div>
+                <div style={{fontSize:"13px",fontWeight:"700",marginBottom:"3px"}}>🔐 Kurye Onay Sistemi</div>
+                <div style={{fontSize:"11px",color:C.muted}}>{onaySistemi?"Açık — Yeni kuryeler admin onayı bekler":"Kapalı — Kuryeler direkt giriş yapabilir"}</div>
+              </div>
+              <button onClick={toggleOnaySistemi} disabled={onayYukleniyor} style={{padding:"10px 20px",borderRadius:"10px",border:"1px solid "+(onaySistemi?"rgba(232,80,10,0.4)":"rgba(34,197,94,0.4)"),cursor:"pointer",fontWeight:"700",fontSize:"13px",background:onaySistemi?"rgba(232,80,10,0.15)":"rgba(34,197,94,0.15)",color:onaySistemi?C.accent:C.success,opacity:onayYukleniyor?0.6:1,minWidth:"100px"}}>
+                {onayYukleniyor?"...":onaySistemi?"🔴 Kapat":"🟢 Aç"}
+              </button>
+            </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:"14px",marginBottom:"24px"}}>
               {[
                 {l:"Toplam Sipariş",v:data.siparisler.length,s:"Tüm zamanlar",c:C.accent},
@@ -1234,7 +1376,6 @@ function AdminPanel(){
                 </div>
               ))}
             </div>
-            {/* Son 5 sipariş */}
             <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"20px"}}>
               <div style={{fontSize:"13px",fontWeight:"700",marginBottom:"14px"}}>📋 Son Siparişler</div>
               {data.siparisler.slice(0,5).map(s=>(
@@ -1257,44 +1398,7 @@ function AdminPanel(){
         {!loading&&tab==="siparisler"&&(
           <div className="fade">
             {data.siparisler.length===0&&<div style={{textAlign:"center",color:C.muted,padding:"40px"}}>Henüz sipariş yok.</div>}
-            {data.siparisler.map(s=>(
-              <div key={s.id} style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"16px",marginBottom:"12px"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"12px"}}>
-                  <div>
-                    <div style={{fontSize:"11px",color:C.dim}}>#{s.id.slice(-8).toUpperCase()}</div>
-                    <div style={{fontSize:"11px",color:C.muted,marginTop:"2px"}}>{new Date(s.created_at).toLocaleString("tr-TR")}</div>
-                  </div>
-                  <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
-                    <span style={{fontSize:"11px",padding:"3px 8px",borderRadius:"6px",fontWeight:"700",background:s.durum==="tamamlandi"?"rgba(34,197,94,0.15)":s.durum==="bekliyor"?"rgba(245,158,11,0.15)":"rgba(59,130,246,0.15)",color:s.durum==="tamamlandi"?C.success:s.durum==="bekliyor"?"#f59e0b":"#3b82f6"}}>{s.durum}</span>
-                    <span style={{fontSize:"14px",fontWeight:"900",color:C.accent}}>₺{s.fiyat||0}</span>
-                  </div>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",fontSize:"12px",marginBottom:"12px"}}>
-                  <div style={{background:"rgba(232,80,10,0.07)",borderRadius:"8px",padding:"10px"}}>
-                    <div style={{color:C.accent,fontWeight:"700",fontSize:"10px",marginBottom:"3px"}}>📤 GÖNDERİCİ</div>
-                    <div style={{fontWeight:"600"}}>{s.gon_ad}</div>
-                    <div style={{color:C.muted}}>{s.gon_tel}</div>
-                    <div style={{color:C.muted,fontSize:"11px"}}>{s.gon_adres}</div>
-                  </div>
-                  <div style={{background:"rgba(34,197,94,0.07)",borderRadius:"8px",padding:"10px"}}>
-                    <div style={{color:C.success,fontWeight:"700",fontSize:"10px",marginBottom:"3px"}}>📥 ALICI</div>
-                    <div style={{fontWeight:"600"}}>{s.al_ad}</div>
-                    <div style={{color:C.muted}}>{s.al_tel}</div>
-                    <div style={{color:C.muted,fontSize:"11px"}}>{s.al_adres}</div>
-                  </div>
-                </div>
-                <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
-                  <span style={{fontSize:"11px",background:C.accentGlow,border:"1px solid "+C.accent,borderRadius:"6px",padding:"3px 8px",color:C.accent}}>{s.agirlik||"—"} kg</span>
-                  <span style={{fontSize:"11px",background:"rgba(30,58,96,0.3)",border:"1px solid "+C.border,borderRadius:"6px",padding:"3px 8px",color:C.muted}}>{s.mesafe||"—"} km</span>
-                  <span style={{fontSize:"11px",background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.2)",borderRadius:"6px",padding:"3px 8px",color:C.success}}>Komisyon: ₺{Math.ceil((s.fiyat||0)*0.25)}</span>
-                  {s.durum!=="tamamlandi"&&s.durum!=="iptal"&&(
-                    <button onClick={()=>siparisDurumDegistir(s.id,"iptal")} style={{fontSize:"11px",background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:"6px",padding:"3px 8px",color:C.error,cursor:"pointer",marginLeft:"auto"}}>
-                      ✕ İptal Et
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+            {data.siparisler.map(s=><SiparisKart key={s.id} s={s}/>)}
           </div>
         )}
 
@@ -1302,26 +1406,7 @@ function AdminPanel(){
         {!loading&&tab==="kuryeler"&&(
           <div className="fade">
             {data.kuryeler.length===0&&<div style={{textAlign:"center",color:C.muted,padding:"40px"}}>Henüz kayıtlı kurye yok.</div>}
-            {data.kuryeler.map(k=>(
-              <div key={k.id} style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"16px",marginBottom:"12px"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:"14px",fontWeight:"700"}}>{k.ad} {k.soyad}</div>
-                    <div style={{fontSize:"12px",color:C.muted,marginTop:"3px"}}>{k.tel}</div>
-                    <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginTop:"8px"}}>
-                      <span style={{fontSize:"11px",background:"rgba(30,58,96,0.3)",border:"1px solid "+C.border,borderRadius:"6px",padding:"3px 8px",color:C.muted}}>{k.arac_turu||"—"}</span>
-                      {k.plaka&&<span style={{fontSize:"11px",background:"rgba(30,58,96,0.3)",border:"1px solid "+C.border,borderRadius:"6px",padding:"3px 8px",color:C.muted}}>{k.plaka}</span>}
-                      <span style={{fontSize:"11px",padding:"3px 8px",borderRadius:"6px",fontWeight:"700",background:k.durum==="aktif"?"rgba(34,197,94,0.15)":"rgba(245,158,11,0.15)",color:k.durum==="aktif"?C.success:"#f59e0b"}}>{k.durum||"beklemede"}</span>
-                    </div>
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",gap:"6px",marginLeft:"12px"}}>
-                    {k.durum!=="aktif"&&<button onClick={()=>kurye_durumDegistir(k.id,"aktif")} style={{fontSize:"11px",background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.3)",borderRadius:"7px",padding:"6px 12px",color:C.success,cursor:"pointer",fontWeight:"700"}}>✓ Onayla</button>}
-                    {k.durum==="aktif"&&<button onClick={()=>kurye_durumDegistir(k.id,"pasif")} style={{fontSize:"11px",background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:"7px",padding:"6px 12px",color:C.error,cursor:"pointer",fontWeight:"700"}}>Askıya Al</button>}
-                    {k.durum==="pasif"&&<button onClick={()=>kurye_durumDegistir(k.id,"aktif")} style={{fontSize:"11px",background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.3)",borderRadius:"7px",padding:"6px 12px",color:C.success,cursor:"pointer",fontWeight:"700"}}>Aktifleştir</button>}
-                  </div>
-                </div>
-              </div>
-            ))}
+            {data.kuryeler.map(k=><KuryeKart key={k.id} k={k}/>)}
           </div>
         )}
 
@@ -1329,23 +1414,89 @@ function AdminPanel(){
         {!loading&&tab==="musteriler"&&(
           <div className="fade">
             {data.musteriler.length===0&&<div style={{textAlign:"center",color:C.muted,padding:"40px"}}>Henüz kayıtlı müşteri yok.</div>}
-            {data.musteriler.map(m=>(
-              <div key={m.id} style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"16px",marginBottom:"12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div>
-                  <div style={{fontSize:"13px",fontWeight:"700"}}>{m.ad} {m.soyad}</div>
-                  <div style={{fontSize:"12px",color:C.muted,marginTop:"3px"}}>{m.tel}</div>
-                  <div style={{fontSize:"11px",color:C.dim,marginTop:"3px"}}>{m.adres}</div>
-                </div>
-                <div style={{textAlign:"right",fontSize:"11px",color:C.dim}}>
-                  {new Date(m.created_at).toLocaleDateString("tr-TR")}
-                </div>
+            {data.musteriler.map(m=><MusteriKart key={m.id} m={m}/>)}
+          </div>
+        )}
+
+        {/* 🔍 ARAMA */}
+        {!loading&&tab==="arama"&&(
+          <div className="fade">
+            <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"20px",marginBottom:"20px"}}>
+              <div style={{fontSize:"14px",fontWeight:"700",marginBottom:"14px"}}>🔍 Hızlı Arama</div>
+              <div style={{display:"flex",gap:"8px",marginBottom:"12px",flexWrap:"wrap"}}>
+                {[["hepsi","Hepsi"],["siparis","Siparişler"],["kurye","Kuryeler"],["musteri","Müşteriler"]].map(([v,l])=>(
+                  <button key={v} onClick={()=>{setAramaTipi(v);setAramaStok(null);}} style={{padding:"7px 14px",borderRadius:"8px",border:"1px solid "+(aramaTipi===v?C.accent:C.border),background:aramaTipi===v?C.accentGlow:"transparent",color:aramaTipi===v?C.accent:C.muted,fontSize:"12px",fontWeight:"700",cursor:"pointer"}}>
+                    {l}
+                  </button>
+                ))}
               </div>
-            ))}
+              <div style={{display:"flex",gap:"8px"}}>
+                <input
+                  placeholder="Ad, telefon, plaka, adres, sipariş no, TC..."
+                  value={aramaMetni}
+                  onChange={e=>setAramaMetni(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter"&&aramaYap()}
+                  style={{flex:1,padding:"12px 14px",borderRadius:"10px",border:"1px solid "+C.inBorder,background:C.inBg,color:C.text,fontSize:"14px",outline:"none"}}
+                />
+                <button onClick={aramaYap} style={{...btnP,boxShadow:"none",padding:"12px 20px",whiteSpace:"nowrap"}}>Ara</button>
+                {aramaStok&&<button onClick={()=>{setAramaMetni("");setAramaStok(null);}} style={{...btnS,padding:"12px 16px"}}>✕</button>}
+              </div>
+            </div>
+
+            {aramaStok&&(
+              <div>
+                {/* Sipariş sonuçları */}
+                {(aramaTipi==="hepsi"||aramaTipi==="siparis")&&(
+                  <div style={{marginBottom:"20px"}}>
+                    <div style={{fontSize:"12px",fontWeight:"700",color:C.muted,marginBottom:"10px"}}>📦 SİPARİŞLER ({aramaStok.siparisler.length})</div>
+                    {aramaStok.siparisler.length===0
+                      ?<div style={{color:C.dim,fontSize:"12px",padding:"10px"}}>Sipariş bulunamadı.</div>
+                      :aramaStok.siparisler.map(s=><SiparisKart key={s.id} s={s}/>)
+                    }
+                  </div>
+                )}
+                {/* Kurye sonuçları */}
+                {(aramaTipi==="hepsi"||aramaTipi==="kurye")&&(
+                  <div style={{marginBottom:"20px"}}>
+                    <div style={{fontSize:"12px",fontWeight:"700",color:C.muted,marginBottom:"10px"}}>🏍️ KURYELER ({aramaStok.kuryeler.length})</div>
+                    {aramaStok.kuryeler.length===0
+                      ?<div style={{color:C.dim,fontSize:"12px",padding:"10px"}}>Kurye bulunamadı.</div>
+                      :aramaStok.kuryeler.map(k=><KuryeKart key={k.id} k={k}/>)
+                    }
+                  </div>
+                )}
+                {/* Müşteri sonuçları */}
+                {(aramaTipi==="hepsi"||aramaTipi==="musteri")&&(
+                  <div style={{marginBottom:"20px"}}>
+                    <div style={{fontSize:"12px",fontWeight:"700",color:C.muted,marginBottom:"10px"}}>👤 MÜŞTERİLER ({aramaStok.musteriler.length})</div>
+                    {aramaStok.musteriler.length===0
+                      ?<div style={{color:C.dim,fontSize:"12px",padding:"10px"}}>Müşteri bulunamadı.</div>
+                      :aramaStok.musteriler.map(m=><MusteriKart key={m.id} m={m}/>)
+                    }
+                  </div>
+                )}
+                {aramaStok.siparisler.length===0&&aramaStok.kuryeler.length===0&&aramaStok.musteriler.length===0&&(
+                  <div style={{textAlign:"center",color:C.muted,padding:"40px",fontSize:"14px"}}>
+                    <div style={{fontSize:"32px",marginBottom:"10px"}}>🔍</div>
+                    "{aramaMetni}" için sonuç bulunamadı.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!aramaStok&&(
+              <div style={{textAlign:"center",color:C.dim,padding:"40px",fontSize:"13px"}}>
+                <div style={{fontSize:"32px",marginBottom:"10px"}}>🔍</div>
+                Ad, telefon, plaka, adres veya sipariş numarası ile arama yap
+              </div>
+            )}
           </div>
         )}
       </div>
     </div>
   );
+}
+
 }
 
 /* ══════════════════════════════════════════════
