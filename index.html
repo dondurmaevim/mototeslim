@@ -122,7 +122,7 @@ function PaketGonder({user,onClose}){
   const birimSayisi=mesafe>0?Math.ceil(mesafeM/100):0;
   const mesafeUcret=birimSayisi*PER_100M;
   const fiyat=efKg>0&&mesafe>0?(mesafe<1?90:ACILIS+mesafeUcret):0;
-  const komisyon=Math.ceil(fiyat*0.25);
+  const komisyon=Math.ceil(fiyat*0.30);
   const kuryeKazanc=fiyat-komisyon;
 
   const mesafeHesapla=()=>{
@@ -749,7 +749,7 @@ function GondericiModal({onClose, onSuccess}){
   const[tab,setTab]=useState("giris");
   const[loading,setLoading]=useState(false);
   const[alert,setAlert]=useState({type:"",msg:""});
-  const[form,setForm]=useState({ad:"",soyad:"",email:"",tel:"",tc:"",adres:"",sifre:"",refKod:""});
+  const[form,setForm]=useState({ad:"",soyad:"",email:"",tel:"",tc:"",adres:"",sifre:"",refKod:"",iban:"",pazarlamaKatil:false});
   const[err,setErr]=useState({});
   const set=k=>e=>setForm(f=>({...f,[k]:e.target.value}));
 
@@ -789,7 +789,9 @@ function GondericiModal({onClose, onSuccess}){
         user_id:data.user.id,
         ad:form.ad,soyad:form.soyad,tel:form.tel,tc:form.tc,adres:form.adres,
         ref_kod:form.tel.replace(/[^0-9]/g,"").replace(/^0/,""),
-        davetci_kod:form.refKod.trim()||null
+        davetci_kod:form.refKod.trim()||null,
+        iban:form.pazarlamaKatil?form.iban.trim()||null:null,
+        bakiye:0
       });
 
       // Referans zinciri kaydet
@@ -863,6 +865,21 @@ function GondericiModal({onClose, onSuccess}){
           <Inp label="Adres" placeholder="Mahalle, Sokak, No..." value={form.adres} onChange={set("adres")} optional/>
           <div><Inp label="Şifre" placeholder="En az 6 karakter" type="password" value={form.sifre} onChange={set("sifre")}/>{err.sifre&&<div style={{color:C.error,fontSize:"10px",marginTop:"3px"}}>{err.sifre}</div>}</div>
           <Inp label="Referans Kodu (opsiyonel)" placeholder="Sizi davet edenin tel no (05xx...)" value={form.refKod} onChange={set("refKod")} optional/>
+          {/* Pazarlama planı */}
+          <label style={{display:"flex",alignItems:"flex-start",gap:"10px",cursor:"pointer",padding:"12px 14px",borderRadius:"10px",border:"1px dashed "+(form.pazarlamaKatil?"rgba(232,80,10,0.5)":"#1e3a5f"),background:form.pazarlamaKatil?"rgba(232,80,10,0.06)":"transparent"}}>
+            <input type="checkbox" checked={form.pazarlamaKatil} onChange={e=>setForm(f=>({...f,pazarlamaKatil:e.target.checked}))}
+              style={{width:"16px",height:"16px",accentColor:"#e8500a",cursor:"pointer",flexShrink:0,marginTop:"2px"}}/>
+            <div>
+              <div style={{fontSize:"13px",fontWeight:"700",color:form.pazarlamaKatil?"#e8500a":"#94a3b8"}}>🏆 Pazarlama planına katılmak istiyorum</div>
+              <div style={{fontSize:"11px",color:"#475569",marginTop:"2px"}}>Davet ettiğin kişilerin işlemlerinden %5/%3/%1 prim kazan</div>
+            </div>
+          </label>
+          {form.pazarlamaKatil&&(
+            <div className="fade">
+              <Inp label="IBAN (ödeme için)" placeholder="TR00 0000 0000 0000 0000 0000 00" value={form.iban} onChange={set("iban")} optional/>
+              <div style={{fontSize:"11px",color:"#475569",marginTop:"-8px",marginBottom:"8px"}}>IBAN girerseniz biriken primlerinizi çekme talebinde bulunabilirsiniz.</div>
+            </div>
+          )}
           <Alert type={alert.type} msg={alert.msg}/>
           <button onClick={kayit} disabled={loading} style={{...btnP,width:"100%",marginTop:"16px",boxShadow:"none",opacity:loading?0.7:1}}>
             {loading?<span className="spin">⏳</span>:"Kayıt Ol"}
@@ -923,8 +940,8 @@ function KuryeDash({user,onLogout}){
         const now=new Date();
         return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
       })||[];
-      const buAyK=buAy.reduce((s,t)=>s+(t.fiyat*(1-0.25)),0);
-      const toplamK=tam?.reduce((s,t)=>s+(t.fiyat*(1-0.25)),0)||0;
+      const buAyK=buAy.reduce((s,t)=>s+(t.fiyat*(1-0.30)),0);
+      const toplamK=tam?.reduce((s,t)=>s+(t.fiyat*(1-0.30)),0)||0;
       // Sadakat ödülü: her 50 teslimatta ₺50
       const odul=Math.floor(toplamT/50)*50;
       setStats({toplamTeslimat:toplamT,buAyKazanc:Math.ceil(buAyK),toplamKazanc:Math.ceil(toplamK+odul),puan:4.8});
@@ -967,43 +984,74 @@ function KuryeDash({user,onLogout}){
     }
     await sb.from("teslimatlar").update({durum:"tamamlandi",tamamlanma_zamani:new Date().toISOString()}).eq("id",aktifSiparis.id);
     const fiyat=aktifSiparis.fiyat||0;
-    const komisyon=0.25;
-    const kazanc=Math.ceil(fiyat*(1-komisyon));
     const yeniToplam=stats.toplamTeslimat+1;
 
-    // Kurye bakiyesine kazanç ekle
-    const{data:kuryeData}=await sb.from("kuryeler").select("bakiye,ref_kod,davetci_kod").eq("user_id",user.id).maybeSingle();
+    // Kurye verisini al
+    const{data:kuryeData}=await sb.from("kuryeler").select("id,bakiye,ref_kod").eq("user_id",user.id).maybeSingle();
     const mevcutBakiye=parseFloat(kuryeData?.bakiye||0);
-    await sb.from("kuryeler").update({bakiye:mevcutBakiye+kazanc}).eq("user_id",user.id);
-
-    // Referans primleri hesapla
     const kurye_ref_kod=kuryeData?.ref_kod||"";
+
+    // Prim hesapla - kuryeyi davet edenler
+    let toplamPrim=0;
+    const buAyBaslangic=new Date();buAyBaslangic.setDate(1);buAyBaslangic.setHours(0,0,0,0);
     if(kurye_ref_kod){
-      // Bu kuryeyi davet edenlere prim ver
       const{data:refler}=await sb.from("referanslar").select("davetci_tel,katman").eq("davet_edilen_tel",kurye_ref_kod);
       if(refler&&refler.length>0){
-        // Bu ay min 3 iş kontrolü
-        const buAyBaslangic=new Date();buAyBaslangic.setDate(1);buAyBaslangic.setHours(0,0,0,0);
         for(const ref of refler){
           const primOran=ref.katman===1?0.05:ref.katman===2?0.03:0.01;
           const primTutar=Math.ceil(fiyat*primOran);
           if(primTutar<=0)continue;
+          toplamPrim+=primTutar;
           // Davetçi bu ay min 3 iş yapmış mı?
           const{data:davetciKurye}=await sb.from("kuryeler").select("id,bakiye").eq("ref_kod",ref.davetci_tel).maybeSingle();
           if(!davetciKurye)continue;
           const{data:aylikIsler}=await sb.from("teslimatlar").select("id").eq("kurye_id",davetciKurye.id).eq("durum","tamamlandi").gte("tamamlanma_zamani",buAyBaslangic.toISOString());
           if((aylikIsler?.length||0)>=3){
-            const davetciBakiye=parseFloat(davetciKurye.bakiye||0);
-            await sb.from("kuryeler").update({bakiye:davetciBakiye+primTutar}).eq("id",davetciKurye.id);
+            // Şartı karşılıyor → davetçinin bakiyesine ekle
+            const dBakiye=parseFloat(davetciKurye.bakiye||0);
+            await sb.from("kuryeler").update({bakiye:dBakiye+primTutar}).eq("id",davetciKurye.id);
           }
+          // Şartı karşılamıyorsa prim platformda kalır (hiçbir yere eklenmez)
         }
       }
     }
 
-    // Sadakat ödülü kontrolü
+    // Kurye net kazancı: %70 - primler (primler kuryeden kesilir)
+    const platformPay=Math.ceil(fiyat*0.30);
+    const kazanc=fiyat-platformPay-toplamPrim;
+
+    // Kurye bakiyesine ekle
     const odulKazandi=yeniToplam%50===0;
-    if(odulKazandi){
-      await sb.from("kuryeler").update({bakiye:mevcutBakiye+kazanc+50}).eq("user_id",user.id);
+    const finalKazanc=kazanc+(odulKazandi?50:0);
+    await sb.from("kuryeler").update({bakiye:mevcutBakiye+finalKazanc}).eq("user_id",user.id);
+
+    // Müşteri referans primlerini hesapla (paketi gönderen müşteriyi davet edenlere)
+    const musteriId=aktifSiparis.musteri_id;
+    if(musteriId){
+      const{data:musteriData}=await sb.from("musteriler").select("ref_kod,bakiye").eq("id",musteriId).maybeSingle();
+      if(musteriData?.ref_kod){
+        const{data:mRefler}=await sb.from("referanslar").select("davetci_tel,katman").eq("davet_edilen_tel",musteriData.ref_kod);
+        if(mRefler&&mRefler.length>0){
+          for(const ref of mRefler){
+            const primOran=ref.katman===1?0.05:ref.katman===2?0.03:0.01;
+            const primTutar=Math.ceil(fiyat*primOran);
+            if(primTutar<=0)continue;
+            // Davetçi kurye mi müşteri mi?
+            const{data:dKurye}=await sb.from("kuryeler").select("id,bakiye").eq("ref_kod",ref.davetci_tel).maybeSingle();
+            const{data:dMusteri}=await sb.from("musteriler").select("id,bakiye").eq("ref_kod",ref.davetci_tel).maybeSingle();
+            const davetci=dKurye||dMusteri;
+            const davetciTablo=dKurye?"kuryeler":"musteriler";
+            if(!davetci)continue;
+            // Min 3 iş kontrolü (kuryeyse)
+            if(dKurye){
+              const{data:ayIs}=await sb.from("teslimatlar").select("id").eq("kurye_id",dKurye.id).eq("durum","tamamlandi").gte("tamamlanma_zamani",buAyBaslangic.toISOString());
+              if((ayIs?.length||0)<3)continue;
+            }
+            const dBakiye=parseFloat(davetci.bakiye||0);
+            await sb.from(davetciTablo).update({bakiye:dBakiye+primTutar}).eq("id",davetci.id);
+          }
+        }
+      }
     }
 
     setAktifSiparis(null);
@@ -1012,7 +1060,7 @@ function KuryeDash({user,onLogout}){
     setTab("bekleyen");
     yukle();
     if(odulKazandi){
-      alert("🎉 Tebrikler! 50 teslimat tamamladın! ₺50 sadakat ödülü + ₺"+kazanc+" kazancın hesabına eklendi!");
+      alert("🎉 Tebrikler! 50 teslimat tamamladın! ₺50 sadakat ödülü dahil ₺"+finalKazanc+" bakiyene eklendi!");
     }else{
       alert("✓ Teslimat tamamlandı! ₺"+kazanc+" bakiyene eklendi!");
     }
@@ -1087,7 +1135,7 @@ function KuryeDash({user,onLogout}){
           <div style={{display:"flex",gap:"10px",alignItems:"center",marginBottom:"14px",fontSize:"12px"}}>
             <span style={{background:C.accentGlow,border:"1px solid "+C.accent,borderRadius:"8px",padding:"4px 10px",color:C.accent,fontWeight:"700"}}>{aktifSiparis.agirlik} kg</span>
             <span style={{background:"rgba(30,58,96,0.3)",border:"1px solid "+C.border,borderRadius:"8px",padding:"4px 10px",color:C.muted}}>{aktifSiparis.mesafe||"—"} km</span>
-            <span style={{background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.3)",borderRadius:"8px",padding:"4px 10px",color:C.success,fontWeight:"700"}}>₺{Math.ceil((aktifSiparis.fiyat||0)*0.75)} kazanç</span>
+            <span style={{background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.3)",borderRadius:"8px",padding:"4px 10px",color:C.success,fontWeight:"700"}}>₺{Math.ceil((aktifSiparis.fiyat||0)*0.70)} kazanç</span>
           </div>
 
           {aktifSiparis.durum==="kabul_edildi"&&(
@@ -1146,7 +1194,7 @@ function KuryeDash({user,onLogout}){
             <div key={s.id} style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"16px",marginBottom:"12px"}} className="fade">
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"12px"}}>
                 <div style={{fontSize:"11px",color:C.dim}}>#{s.id.slice(-6).toUpperCase()}</div>
-                <div style={{fontSize:"13px",fontWeight:"800",color:C.success}}>₺{Math.ceil((s.fiyat||0)*0.75)}</div>
+                <div style={{fontSize:"13px",fontWeight:"800",color:C.success}}>₺{Math.ceil((s.fiyat||0)*0.70)}</div>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",fontSize:"12px",marginBottom:"12px"}}>
                 <div>
@@ -1206,7 +1254,7 @@ function GecmisTeslimatlar({userId}){
             <div style={{fontSize:"10px",color:C.dim,marginTop:"3px"}}>{new Date(s.created_at).toLocaleDateString("tr-TR")}</div>
           </div>
           <div style={{textAlign:"right"}}>
-            <div style={{fontSize:"15px",fontWeight:"800",color:C.success}}>₺{Math.ceil((s.fiyat||0)*0.75)}</div>
+            <div style={{fontSize:"15px",fontWeight:"800",color:C.success}}>₺{Math.ceil((s.fiyat||0)*0.70)}</div>
             <div style={{fontSize:"10px",color:C.dim,marginTop:"2px"}}>{s.agirlik} kg · {s.mesafe||"—"} km</div>
           </div>
         </div>
@@ -1339,7 +1387,7 @@ function AdminPanel(){
     kamyon_acilis:1500,kamyon_100m_kisa:35,kamyon_km_uzun:45,kamyon_sinir:10,
     ceza_moto:50,ceza_oto:50,ceza_kamy:250,ceza_kamyon:1500,
     ceza_gelmeme_dk:15,ceza_teslimat_dk:60,
-    yakit_tazminat:30,komisyon:25,
+    yakit_tazminat:30,komisyon:30,
     ref_kat1:5,ref_kat2:3,ref_kat3:1,ref_min_is:3,
     moto_max_kg:15,oto_max_kg:250,kamy_max_kg:3000,kamyon_max_kg:27000,
   });
@@ -1592,7 +1640,7 @@ function AdminPanel(){
   const bekliyor=data.siparisler.filter(s=>s.durum==="bekliyor");
   const yolda=data.siparisler.filter(s=>s.durum==="yolda"||s.durum==="kabul_edildi");
   const toplamCiro=tamam.reduce((s,x)=>s+(x.fiyat||0),0);
-  const toplamKomisyon=Math.ceil(toplamCiro*0.25);
+  const toplamKomisyon=Math.ceil(toplamCiro*0.30);
   const bugun=new Date().toDateString();
   const bugunSip=tamam.filter(s=>new Date(s.created_at).toDateString()===bugun);
   const bugunCiro=bugunSip.reduce((s,x)=>s+(x.fiyat||0),0);
@@ -1626,7 +1674,7 @@ function AdminPanel(){
       <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
         <span style={{fontSize:"11px",background:C.accentGlow,border:"1px solid "+C.accent,borderRadius:"6px",padding:"3px 8px",color:C.accent}}>{s.agirlik||"—"} kg</span>
         <span style={{fontSize:"11px",background:"rgba(30,58,96,0.3)",border:"1px solid "+C.border,borderRadius:"6px",padding:"3px 8px",color:C.muted}}>{s.mesafe||"—"} km</span>
-        <span style={{fontSize:"11px",background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.2)",borderRadius:"6px",padding:"3px 8px",color:C.success}}>Komisyon: ₺{Math.ceil((s.fiyat||0)*0.25)}</span>
+        <span style={{fontSize:"11px",background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.2)",borderRadius:"6px",padding:"3px 8px",color:C.success}}>Komisyon: ₺{Math.ceil((s.fiyat||0)*0.30)}</span>
         {s.durum!=="tamamlandi"&&s.durum!=="iptal"&&(
           <button onClick={()=>siparisDurumDegistir(s.id,"iptal")} style={{fontSize:"11px",background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:"6px",padding:"3px 8px",color:C.error,cursor:"pointer",marginLeft:"auto"}}>✕ İptal Et</button>
         )}
@@ -1999,7 +2047,7 @@ function AdminPanel(){
             const dav=seciliKisi.davetilenler||[];
             const tamamlanan=sip.filter(s=>s.durum==="tamamlandi");
             const toplamKazanc=tamamlanan.reduce((t,s)=>t+(s.fiyat||0),0);
-            const kurye_kazanc=Math.ceil(toplamKazanc*0.75);
+            const kurye_kazanc=Math.ceil(toplamKazanc*0.70);
             const buAy=new Date().getMonth();
             const buAySip=tamamlanan.filter(s=>new Date(s.created_at).getMonth()===buAy);
             const buAyKazanc=buAySip.reduce((t,s)=>t+(s.fiyat||0),0);
@@ -2028,7 +2076,7 @@ function AdminPanel(){
                     ?{l:"Toplam Kazanç",v:"₺"+kurye_kazanc,c:C.success}
                     :{l:"Toplam Harcama",v:"₺"+Math.ceil(toplamKazanc),c:C.success},
                   seciliKisi.tip==="kurye"
-                    ?{l:"Bu Ay Kazanç",v:"₺"+Math.ceil(buAyKazanc*0.75),c:"#f59e0b"}
+                    ?{l:"Bu Ay Kazanç",v:"₺"+Math.ceil(buAyKazanc*0.70),c:"#f59e0b"}
                     :{l:"Bu Ay Harcama",v:"₺"+Math.ceil(buAyKazanc),c:"#f59e0b"},
                 ].map(x=>(
                   <div key={x.l} style={{background:C.inBg,borderRadius:"10px",padding:"12px",textAlign:"center"}}>
@@ -2200,13 +2248,26 @@ function AdminPanel(){
     {odemeModal&&seciliKisi&&(
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px"}} onClick={()=>setOdemeModal(false)}>
         <div onClick={e=>e.stopPropagation()} style={{background:"#111827",border:"1px solid #1e2d45",borderRadius:"18px",padding:"28px",width:"100%",maxWidth:"400px"}} className="fade">
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"20px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"16px"}}>
             <div>
               <div style={{fontSize:"16px",fontWeight:"800"}}>💸 Ödeme Yap</div>
               <div style={{fontSize:"12px",color:"#94a3b8",marginTop:"3px"}}>{seciliKisi.data.ad} {seciliKisi.data.soyad}</div>
             </div>
             <button onClick={()=>setOdemeModal(false)} style={{background:"none",border:"none",color:"#94a3b8",fontSize:"22px",cursor:"pointer"}}>×</button>
           </div>
+          {/* IBAN Bilgisi */}
+          {seciliKisi.data.iban&&(
+            <div style={{background:"rgba(59,130,246,0.1)",border:"1px solid rgba(59,130,246,0.3)",borderRadius:"10px",padding:"12px 16px",marginBottom:"14px"}}>
+              <div style={{fontSize:"10px",color:"#60a5fa",fontWeight:"700",marginBottom:"4px"}}>🏦 IBAN BİLGİSİ</div>
+              <div style={{fontSize:"13px",fontWeight:"800",color:"#f1f5f9",letterSpacing:"1px"}}>{seciliKisi.data.iban}</div>
+              <div style={{fontSize:"12px",color:"#94a3b8",marginTop:"3px"}}>{seciliKisi.data.iban_ad||seciliKisi.data.ad+" "+seciliKisi.data.soyad}</div>
+            </div>
+          )}
+          {!seciliKisi.data.iban&&(
+            <div style={{background:"rgba(245,158,11,0.1)",border:"1px solid rgba(245,158,11,0.3)",borderRadius:"10px",padding:"10px 14px",marginBottom:"14px",fontSize:"12px",color:"#f59e0b"}}>
+              ⚠️ Bu kurye henüz IBAN bilgisi girmemiş.
+            </div>
+          )}
 
           <div style={{background:"rgba(34,197,94,0.08)",border:"1px solid rgba(34,197,94,0.3)",borderRadius:"10px",padding:"12px 16px",marginBottom:"16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span style={{fontSize:"12px",color:"#94a3b8"}}>Mevcut Bakiye</span>
