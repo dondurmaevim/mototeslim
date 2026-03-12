@@ -116,14 +116,76 @@ function PaketGonder({user,onClose}){
   const desi=(parseFloat(form.en)||0)*(parseFloat(form.boy)||0)*(parseFloat(form.yukseklik)||0)/3000;
   const efKg=kg>20&&desi>0?Math.max(kg,desi):kg;
   const mesafe=mesafeHesap.km||0;
-  const mesafeM=mesafe*1000; // km → metre
-  const ACILIS=70;  // sabit açılış ücreti ₺70
-  const PER_100M=2; // her 100 metrede ₺2 (değiştirilebilir)
-  const birimSayisi=mesafe>0?Math.ceil(mesafeM/100):0;
-  const mesafeUcret=birimSayisi*PER_100M;
-  const fiyat=efKg>0&&mesafe>0?(mesafe<1?90:ACILIS+mesafeUcret):0;
+  const mesafeM=mesafe*1000;
+
+  // Araç tipi belirle (ağırlığa göre)
+  const aracTipi=(()=>{
+    if(efKg<=0)return null;
+    if(efKg<=15)return "motorsiklet";
+    if(efKg<=250)return "otomobil";
+    if(efKg<=3000)return "kamyonet";
+    return "kamyon";
+  })();
+
+  const aracLabel=(()=>{
+    if(aracTipi==="motorsiklet")return "🛵 Motorsiklet";
+    if(aracTipi==="otomobil")return "🚗 Otomobil";
+    if(aracTipi==="kamyonet")return "🚐 Kamyonet";
+    if(aracTipi==="kamyon")return "🚛 Kamyon / TIR";
+    return "—";
+  })();
+
+  // Fiyat hesapla (araç tipine göre)
+  const fiyatHesapla=(tip,km,mM)=>{
+    if(!tip||km<=0)return 0;
+    if(tip==="motorsiklet"){
+      if(km<1)return 90; // 1km altı sabit
+      const birim=Math.ceil(mM/100);
+      return 70+birim*2;
+    }
+    if(tip==="otomobil"){
+      const birim=Math.ceil(mM/100);
+      return 90+birim*5;
+    }
+    if(tip==="kamyonet"){
+      const sinir=10;
+      if(km<=sinir){const birim=Math.ceil(mM/100);return 750+birim*22;}
+      return 750+Math.ceil(km)*23;
+    }
+    if(tip==="kamyon"){
+      const sinir=10;
+      if(km<=sinir){const birim=Math.ceil(mM/100);return 1500+birim*35;}
+      return 1500+Math.ceil(km)*45;
+    }
+    return 0;
+  };
+
+  const fiyat=efKg>0&&mesafe>0?fiyatHesapla(aracTipi,mesafe,mesafeM):0;
   const komisyon=Math.ceil(fiyat*0.30);
   const kuryeKazanc=fiyat-komisyon;
+
+  // Fiyat detay bilgileri
+  const fiyatDetay=(()=>{
+    if(!aracTipi||mesafe<=0)return null;
+    if(aracTipi==="motorsiklet"){
+      if(mesafe<1)return{acilis:0,mesafeUcret:0,sabit:90,birimSayisi:0,perBirim:0};
+      const birim=Math.ceil(mesafeM/100);
+      return{acilis:70,mesafeUcret:birim*2,sabit:0,birimSayisi:birim,perBirim:2};
+    }
+    if(aracTipi==="otomobil"){
+      const birim=Math.ceil(mesafeM/100);
+      return{acilis:90,mesafeUcret:birim*5,sabit:0,birimSayisi:birim,perBirim:5};
+    }
+    if(aracTipi==="kamyonet"){
+      if(mesafe<=10){const birim=Math.ceil(mesafeM/100);return{acilis:750,mesafeUcret:birim*22,sabit:0,birimSayisi:birim,perBirim:22,uzun:false};}
+      return{acilis:750,mesafeUcret:Math.ceil(mesafe)*23,sabit:0,birimSayisi:Math.ceil(mesafe),perBirim:23,uzun:true};
+    }
+    if(aracTipi==="kamyon"){
+      if(mesafe<=10){const birim=Math.ceil(mesafeM/100);return{acilis:1500,mesafeUcret:birim*35,sabit:0,birimSayisi:birim,perBirim:35,uzun:false};}
+      return{acilis:1500,mesafeUcret:Math.ceil(mesafe)*45,sabit:0,birimSayisi:Math.ceil(mesafe),perBirim:45,uzun:true};
+    }
+    return null;
+  })();
 
   const mesafeHesapla=()=>{
     const gonAdres=farkliAdres?form.gonAdres:(user&&user.adres?user.adres:form.gonAdres);
@@ -232,7 +294,7 @@ function PaketGonder({user,onClose}){
           agirlik:efKg,
           mesafe:mesafe,
           fiyat:fiyat,
-          arac_turu:kg<=15?"motorsiklet":"otomobil",
+          arac_turu:aracTipi||"motorsiklet",
           durum:"bekliyor",
         });
       }catch(e){console.log("Kayıt hatası:",e);}
@@ -368,21 +430,34 @@ function PaketGonder({user,onClose}){
             </div>
           )}
           {err.mesafe&&<div style={{color:C.error,fontSize:"11px",marginBottom:"8px"}}>⚠️ {err.mesafe}</div>}
+          {efKg>0&&!aracTipi&&(
+            <div style={{background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:"10px",padding:"10px",fontSize:"12px",color:C.error,marginBottom:"12px"}}>
+              ⚠️ Maksimum ağırlık 27.000 kg'dır.
+            </div>
+          )}
+          {efKg>0&&aracTipi&&mesafe===0&&!mesafeHesap.yukleniyor&&(
+            <div style={{background:"rgba(30,58,96,0.3)",border:"1px solid "+C.navy,borderRadius:"10px",padding:"10px",fontSize:"12px",color:C.muted,marginBottom:"12px"}}>
+              {aracLabel} seçildi. Alıcı adresi girilince fiyat hesaplanacak.
+            </div>
+          )}
           {fiyat>0&&!mesafeHesap.yukleniyor&&(
             <div style={{background:"linear-gradient(135deg,rgba(232,80,10,0.12),rgba(30,58,96,0.25))",border:"1px solid "+C.accent,borderRadius:"14px",padding:"18px",marginBottom:"12px"}} className="fade">
-              <div style={{fontSize:"12px",fontWeight:"700",color:C.accent,marginBottom:"12px"}}>💰 FİYAT HESAPLAMA</div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
+                <div style={{fontSize:"12px",fontWeight:"700",color:C.accent}}>💰 FİYAT HESAPLAMA</div>
+                <div style={{fontSize:"12px",fontWeight:"800",padding:"4px 10px",borderRadius:"8px",background:"rgba(232,80,10,0.15)",color:C.accent}}>{aracLabel}</div>
+              </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",fontSize:"12px",marginBottom:"12px"}}>
-                <div style={{color:C.muted}}>Gerçek mesafe:</div>
-                <div style={{fontWeight:"600",color:C.success}}>{Number(mesafe)||"?"} km {mesafeHesap.sure?"(~"+mesafeHesap.sure+")":""}</div>
+                <div style={{color:C.muted}}>Mesafe:</div>
+                <div style={{fontWeight:"600",color:C.success}}>{mesafe.toFixed(1)} km {mesafeHesap.sure?"(~"+mesafeHesap.sure+")":""}</div>
                 <div style={{color:C.muted}}>Efektif ağırlık:</div>
                 <div style={{fontWeight:"600"}}>{efKg.toFixed(1)} kg</div>
-                <div style={{color:C.muted}}>Araç türü:</div>
-                <div style={{fontWeight:"600"}}>{kg<=15?"🏍️ Motorsiklet":"🚗 Araç/Kamyonet"}</div>
-                <div style={{color:C.muted}}>Açılış ücreti:</div>
-                <div style={{fontWeight:"600"}}>₺{ACILIS}</div>
-                <div style={{color:C.muted}}>Mesafe ücreti:</div>
-                <div style={{fontWeight:"600"}}>₺{mesafeUcret} ({mesafe>0?birimSayisi:0} × ₺{PER_100M})</div>
-                <div style={{color:C.muted}}>Komisyon (%25):</div>
+                {fiyatDetay&&fiyatDetay.sabit>0&&<><div style={{color:C.muted}}>Sabit ücret:</div><div style={{fontWeight:"600"}}>₺{fiyatDetay.sabit}</div></>}
+                {fiyatDetay&&fiyatDetay.acilis>0&&<><div style={{color:C.muted}}>Açılış ücreti:</div><div style={{fontWeight:"600"}}>₺{fiyatDetay.acilis}</div></>}
+                {fiyatDetay&&fiyatDetay.mesafeUcret>0&&(
+                  <><div style={{color:C.muted}}>Mesafe ücreti:</div>
+                  <div style={{fontWeight:"600"}}>₺{fiyatDetay.mesafeUcret} ({fiyatDetay.birimSayisi} × ₺{fiyatDetay.perBirim}{fiyatDetay.uzun?" /km":" /100m"})</div></>
+                )}
+                <div style={{color:C.muted}}>Komisyon (%30):</div>
                 <div style={{fontWeight:"600",color:C.muted}}>₺{komisyon}</div>
                 <div style={{color:C.muted}}>Kurye kazancı:</div>
                 <div style={{fontWeight:"600",color:C.success}}>₺{kuryeKazanc}</div>
