@@ -1,5 +1,10 @@
-const SUPABASE_URL = 'https://ysvfwvebxdshwagtlmdc.supabase.co';
-const SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlzdmZ3dmVieGRzaHdhZ3RsbWRjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mjc3NjM3MCwiZXhwIjoyMDg4MzUyMzcwfQ.ePTRmL7zh4tGNwuRH5chvzsLgkMy1QAJKlj8cX85CNQ';
+const { createClient } = require('@supabase/supabase-js');
+
+const supabase = createClient(
+  'https://ysvfwvebxdshwagtlmdc.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlzdmZ3dmVieGRzaHdhZ3RsbWRjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mjc3NjM3MCwiZXhwIjoyMDg4MzUyMzcwfQ.ePTRmL7zh4tGNwuRH5chvzsLgkMy1QAJKlj8cX85CNQ',
+  { auth: { autoRefreshToken: false, persistSession: false } }
+);
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -12,27 +17,18 @@ module.exports = async (req, res) => {
 
   try {
     if (islem === 'sil_kullanici') {
-      if (tablo && id) {
-        await fetch(`${SUPABASE_URL}/rest/v1/${tablo}?id=eq.${id}`, {
-          method: 'DELETE',
-          headers: {
-            'apikey': SERVICE_KEY,
-            'Authorization': `Bearer ${SERVICE_KEY}`,
-          }
-        });
+      // Önce ilişkili kayıtları temizle, sonra auth sil
+      if (tablo === 'kuryeler') {
+        await supabase.from('teslimatlar').update({ kurye_id: null }).eq('kurye_id', id);
+        await supabase.from('odemeler').delete().eq('kurye_id', id);
+        await supabase.from('kuryeler').delete().eq('id', id);
+      } else if (tablo === 'musteriler') {
+        await supabase.from('teslimatlar').delete().eq('musteri_id', id);
+        await supabase.from('musteriler').delete().eq('id', id);
       }
       if (user_id) {
-        const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${user_id}`, {
-          method: 'DELETE',
-          headers: {
-            'apikey': SERVICE_KEY,
-            'Authorization': `Bearer ${SERVICE_KEY}`,
-          }
-        });
-        if (!r.ok) {
-          const err = await r.json();
-          return res.status(400).json({ error: err.message || 'Silme hatası' });
-        }
+        const { error } = await supabase.auth.admin.deleteUser(user_id);
+        if (error) return res.status(400).json({ error: error.message });
       }
       return res.json({ ok: true });
     }
@@ -40,19 +36,8 @@ module.exports = async (req, res) => {
     if (islem === 'sifre_degistir') {
       if (!user_id || !yeni_sifre) return res.status(400).json({ error: 'Eksik bilgi' });
       if (yeni_sifre.length < 6) return res.status(400).json({ error: 'Şifre en az 6 karakter olmalı' });
-      const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${user_id}`, {
-        method: 'PUT',
-        headers: {
-          'apikey': SERVICE_KEY,
-          'Authorization': `Bearer ${SERVICE_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ password: yeni_sifre })
-      });
-      if (!r.ok) {
-        const err = await r.json();
-        return res.status(400).json({ error: err.message || 'Şifre değiştirme hatası' });
-      }
+      const { error } = await supabase.auth.admin.updateUserById(user_id, { password: yeni_sifre });
+      if (error) return res.status(400).json({ error: error.message });
       return res.json({ ok: true });
     }
 
