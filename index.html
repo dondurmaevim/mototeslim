@@ -523,6 +523,24 @@ function KuryeKayit({onClose, onSuccess}){
         davetci_kod:form.refKod.trim()||null
       });
 
+      // Referans zinciri kaydet
+      if(form.refKod.trim()){
+        const davetciKod=form.refKod.trim().replace(/\D/g,"").replace(/^0/,"");
+        const yeniTel=form.tel.replace(/\D/g,"").replace(/^0/,"");
+        // 1. katman
+        await sb.from("referanslar").insert({davetci_tel:davetciKod,davet_edilen_tel:yeniTel,davet_edilen_tip:"kurye",katman:1});
+        // 2. katman - davetcinin davetcisini bul
+        const{data:kat1}=await sb.from("kuryeler").select("davetci_kod").eq("ref_kod",davetciKod).maybeSingle();
+        if(kat1?.davetci_kod){
+          await sb.from("referanslar").insert({davetci_tel:kat1.davetci_kod,davet_edilen_tel:yeniTel,davet_edilen_tip:"kurye",katman:2});
+          // 3. katman
+          const{data:kat2}=await sb.from("kuryeler").select("davetci_kod").eq("ref_kod",kat1.davetci_kod).maybeSingle();
+          if(kat2?.davetci_kod){
+            await sb.from("referanslar").insert({davetci_tel:kat2.davetci_kod,davet_edilen_tel:yeniTel,davet_edilen_tip:"kurye",katman:3});
+          }
+        }
+      }
+
       setAlert({type:"success",msg:"✓ Kayıt başarılı! E-postanı doğrula, sonra giriş yapabilirsin."});
       setTimeout(()=>{onSuccess({name:form.ad+" "+form.soyad,type:"kurye"});},2000);
     }catch(e){
@@ -773,6 +791,27 @@ function GondericiModal({onClose, onSuccess}){
         ref_kod:form.tel.replace(/[^0-9]/g,"").replace(/^0/,""),
         davetci_kod:form.refKod.trim()||null
       });
+
+      // Referans zinciri kaydet
+      if(form.refKod.trim()){
+        const davetciKod=form.refKod.trim().replace(/\D/g,"").replace(/^0/,"");
+        const yeniTel=form.tel.replace(/[^0-9]/g,"").replace(/^0/,"");
+        await sb.from("referanslar").insert({davetci_tel:davetciKod,davet_edilen_tel:yeniTel,davet_edilen_tip:"musteri",katman:1});
+        // 2. katman
+        const{data:kat1k}=await sb.from("kuryeler").select("davetci_kod").eq("ref_kod",davetciKod).maybeSingle();
+        const{data:kat1m}=await sb.from("musteriler").select("davetci_kod").eq("ref_kod",davetciKod).maybeSingle();
+        const kat1dc=(kat1k||kat1m)?.davetci_kod;
+        if(kat1dc){
+          await sb.from("referanslar").insert({davetci_tel:kat1dc,davet_edilen_tel:yeniTel,davet_edilen_tip:"musteri",katman:2});
+          const{data:kat2k}=await sb.from("kuryeler").select("davetci_kod").eq("ref_kod",kat1dc).maybeSingle();
+          const{data:kat2m}=await sb.from("musteriler").select("davetci_kod").eq("ref_kod",kat1dc).maybeSingle();
+          const kat2dc=(kat2k||kat2m)?.davetci_kod;
+          if(kat2dc){
+            await sb.from("referanslar").insert({davetci_tel:kat2dc,davet_edilen_tel:yeniTel,davet_edilen_tip:"musteri",katman:3});
+          }
+        }
+      }
+
       setAlert({type:"success",msg:"✓ Kayıt başarılı! E-postanı doğrula."});
       setTimeout(()=>onSuccess({name:form.ad+" "+form.soyad,type:"uye"}),2000);
     }catch(e){
@@ -927,19 +966,55 @@ function KuryeDash({user,onLogout}){
       return;
     }
     await sb.from("teslimatlar").update({durum:"tamamlandi",tamamlanma_zamani:new Date().toISOString()}).eq("id",aktifSiparis.id);
-    const kazanc=Math.ceil(aktifSiparis.fiyat*(1-0.25));
+    const fiyat=aktifSiparis.fiyat||0;
+    const komisyon=0.25;
+    const kazanc=Math.ceil(fiyat*(1-komisyon));
     const yeniToplam=stats.toplamTeslimat+1;
+
+    // Kurye bakiyesine kazanç ekle
+    const{data:kuryeData}=await sb.from("kuryeler").select("bakiye,ref_kod,davetci_kod").eq("user_id",user.id).maybeSingle();
+    const mevcutBakiye=parseFloat(kuryeData?.bakiye||0);
+    await sb.from("kuryeler").update({bakiye:mevcutBakiye+kazanc}).eq("user_id",user.id);
+
+    // Referans primleri hesapla
+    const kurye_ref_kod=kuryeData?.ref_kod||"";
+    if(kurye_ref_kod){
+      // Bu kuryeyi davet edenlere prim ver
+      const{data:refler}=await sb.from("referanslar").select("davetci_tel,katman").eq("davet_edilen_tel",kurye_ref_kod);
+      if(refler&&refler.length>0){
+        // Bu ay min 3 iş kontrolü
+        const buAyBaslangic=new Date();buAyBaslangic.setDate(1);buAyBaslangic.setHours(0,0,0,0);
+        for(const ref of refler){
+          const primOran=ref.katman===1?0.05:ref.katman===2?0.03:0.01;
+          const primTutar=Math.ceil(fiyat*primOran);
+          if(primTutar<=0)continue;
+          // Davetçi bu ay min 3 iş yapmış mı?
+          const{data:davetciKurye}=await sb.from("kuryeler").select("id,bakiye").eq("ref_kod",ref.davetci_tel).maybeSingle();
+          if(!davetciKurye)continue;
+          const{data:aylikIsler}=await sb.from("teslimatlar").select("id").eq("kurye_id",davetciKurye.id).eq("durum","tamamlandi").gte("tamamlanma_zamani",buAyBaslangic.toISOString());
+          if((aylikIsler?.length||0)>=3){
+            const davetciBakiye=parseFloat(davetciKurye.bakiye||0);
+            await sb.from("kuryeler").update({bakiye:davetciBakiye+primTutar}).eq("id",davetciKurye.id);
+          }
+        }
+      }
+    }
+
     // Sadakat ödülü kontrolü
     const odulKazandi=yeniToplam%50===0;
+    if(odulKazandi){
+      await sb.from("kuryeler").update({bakiye:mevcutBakiye+kazanc+50}).eq("user_id",user.id);
+    }
+
     setAktifSiparis(null);
     setTeslimKoduInput("");
     setTeslimHata("");
     setTab("bekleyen");
     yukle();
     if(odulKazandi){
-      alert("🎉 Tebrikler! 50 teslimat tamamladın! ₺50 sadakat ödülü hesabına eklendi!");
+      alert("🎉 Tebrikler! 50 teslimat tamamladın! ₺50 sadakat ödülü + ₺"+kazanc+" kazancın hesabına eklendi!");
     }else{
-      alert("✓ Teslimat tamamlandı! Kazancın: ₺"+kazanc);
+      alert("✓ Teslimat tamamlandı! ₺"+kazanc+" bakiyene eklendi!");
     }
   };
 
@@ -1355,7 +1430,27 @@ function AdminPanel(){
     const tablo=tip==="kurye"?"kuryeler":"musteriler";
     const refKod=kisi.tel?(kisi.tel+"").replace(/[^0-9]/g,"").replace(/^0/,""):"";
     const{data:davetilenler}=await sb.from(tablo).select("ad,soyad,tel,created_at").eq("davetci_kod",refKod);
-    setSeciliKisi({tip,data:kisi,siparisler,davetilenler:davetilenler||[]});
+    // Referans kazançları hesapla
+    let refKazanc={kat1:0,kat2:0,kat3:0,toplam:0};
+    if(tip==="kurye"){
+      const kRef=kisi.ref_kod||(kisi.tel||"").replace(/[^0-9]/g,"").replace(/^0/,"");
+      const{data:refTeslimatlar}=await sb.from("referanslar").select("katman,davet_edilen_tel").eq("davetci_tel",kRef);
+      if(refTeslimatlar&&refTeslimatlar.length>0){
+        for(const r of refTeslimatlar){
+          const{data:rKurye}=await sb.from("kuryeler").select("id").eq("ref_kod",r.davet_edilen_tel).maybeSingle();
+          if(!rKurye)continue;
+          const{data:rSip}=await sb.from("teslimatlar").select("fiyat").eq("kurye_id",rKurye.id).eq("durum","tamamlandi");
+          const topFiyat=(rSip||[]).reduce((t,s)=>t+(s.fiyat||0),0);
+          const oran=r.katman===1?0.05:r.katman===2?0.03:0.01;
+          const kazanc=Math.ceil(topFiyat*oran);
+          if(r.katman===1)refKazanc.kat1+=kazanc;
+          else if(r.katman===2)refKazanc.kat2+=kazanc;
+          else refKazanc.kat3+=kazanc;
+        }
+        refKazanc.toplam=refKazanc.kat1+refKazanc.kat2+refKazanc.kat3;
+      }
+    }
+    setSeciliKisi({tip,data:kisi,siparisler,davetilenler:davetilenler||[],refKazanc});
     setDetayYukleniyor(false);
   };
 
@@ -1942,6 +2037,26 @@ function AdminPanel(){
                   </div>
                 ))}
               </div>
+
+              {/* Referans Kazançları - sadece kurye için */}
+              {seciliKisi.tip==="kurye"&&seciliKisi.refKazanc&&seciliKisi.refKazanc.toplam>0&&(
+                <div style={{background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.25)",borderRadius:"12px",padding:"14px 16px",marginBottom:"14px"}}>
+                  <div style={{fontSize:"12px",fontWeight:"800",color:"#60a5fa",marginBottom:"10px"}}>🔗 Referans Kazançları (Toplam)</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",marginBottom:"8px"}}>
+                    {[
+                      {l:"1. Katman (%5)",v:seciliKisi.refKazanc.kat1},
+                      {l:"2. Katman (%3)",v:seciliKisi.refKazanc.kat2},
+                      {l:"3. Katman (%1)",v:seciliKisi.refKazanc.kat3},
+                    ].map(x=>(
+                      <div key={x.l} style={{background:"rgba(15,25,41,0.6)",borderRadius:"8px",padding:"8px",textAlign:"center"}}>
+                        <div style={{fontSize:"9px",color:"#94a3b8",marginBottom:"3px"}}>{x.l}</div>
+                        <div style={{fontSize:"14px",fontWeight:"800",color:"#60a5fa"}}>₺{x.v}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{textAlign:"center",fontSize:"13px",fontWeight:"800",color:"#60a5fa"}}>Toplam Referans Kazancı: ₺{seciliKisi.refKazanc.toplam}</div>
+                </div>
+              )}
 
               {/* Ödeme Butonu - sadece kurye için */}
               {seciliKisi.tip==="kurye"&&(
