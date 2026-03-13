@@ -1552,6 +1552,108 @@ function FooterModal({tip,onClose}){
   );
 }
 
+function AdminBildirim({kuryeler,musteriler}){
+  const[hedef,setHedef]=useState("hepsi");
+  const[tip,setTip]=useState("sms");
+  const[mesaj,setMesaj]=useState("");
+  const[baslik,setBaslik]=useState("");
+  const[loading,setLoading]=useState(false);
+  const[sonuc,setSonuc]=useState({type:"",msg:""});
+
+  const liste=hedef==="kuryeler"?kuryeler:hedef==="musteriler"?musteriler:[...kuryeler,...musteriler];
+  const smsTeller=liste.map(k=>k.tel).filter(Boolean);
+  const mailler=liste.map(k=>k.email).filter(Boolean);
+
+  const gonder=async()=>{
+    if(!mesaj.trim()){setSonuc({type:"error",msg:"Mesaj boş olamaz!"});return;}
+    if(tip==="sms"&&smsTeller.length===0){setSonuc({type:"error",msg:"Seçili grupta telefon numarası yok!"});return;}
+    if(tip==="mail"&&mailler.length===0){setSonuc({type:"error",msg:"Seçili grupta email yok!"});return;}
+    setLoading(true);setSonuc({type:"",msg:""});
+    try{
+      if(tip==="sms"){
+        let basari=0,hata=0;
+        for(const tel of smsTeller){
+          try{
+            await fetch("/api/sms",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tel,mesaj})});
+            basari++;
+          }catch{hata++;}
+        }
+        setSonuc({type:"success",msg:"✅ "+basari+" kişiye SMS gönderildi."+(hata>0?" "+hata+" hata.":"")});
+      }else{
+        const res=await fetch("/api/admin",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({islem:"toplu_mail",mailler,baslik:baslik||"MotoTeslim Duyurusu",mesaj})});
+        const d=await res.json();
+        if(d.ok)setSonuc({type:"success",msg:"✅ "+mailler.length+" kişiye mail gönderildi!"});
+        else setSonuc({type:"error",msg:"Hata: "+d.error});
+      }
+    }catch(e){setSonuc({type:"error",msg:"Hata: "+e.message});}
+    setLoading(false);
+  };
+
+  return(
+    <div>
+      <div style={{fontSize:"13px",color:"#94a3b8",marginBottom:"20px"}}>Tüm kullanıcılara veya belirli gruplara toplu mesaj gönderin.</div>
+      <div style={{marginBottom:"16px"}}>
+        <div style={{fontSize:"11px",fontWeight:"700",color:"#94a3b8",marginBottom:"8px"}}>HEDEF GRUP</div>
+        <div style={{display:"flex",gap:"8px"}}>
+          {[["hepsi","👥 Hepsi",kuryeler.length+musteriler.length],["kuryeler","🛵 Kuryeler",kuryeler.length],["musteriler","👤 Müşteriler",musteriler.length]].map(([v,l,c])=>(
+            <button key={v} onClick={()=>setHedef(v)}
+              style={{flex:1,padding:"10px",borderRadius:"9px",border:"1px solid "+(hedef===v?"#e8500a":"#1e3a5f"),
+                background:hedef===v?"rgba(232,80,10,0.12)":"transparent",
+                color:hedef===v?"#e8500a":"#94a3b8",fontSize:"12px",fontWeight:"700",cursor:"pointer"}}>
+              {l}<br/><span style={{fontSize:"10px",opacity:0.7}}>{c} kişi</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{marginBottom:"16px"}}>
+        <div style={{fontSize:"11px",fontWeight:"700",color:"#94a3b8",marginBottom:"8px"}}>KANAL</div>
+        <div style={{display:"flex",gap:"8px"}}>
+          {[["sms","📱 SMS",smsTeller.length+" numara"],["mail","✉️ E-posta",mailler.length+" adres"]].map(([v,l,c])=>(
+            <button key={v} onClick={()=>setTip(v)}
+              style={{flex:1,padding:"10px",borderRadius:"9px",border:"1px solid "+(tip===v?"#e8500a":"#1e3a5f"),
+                background:tip===v?"rgba(232,80,10,0.12)":"transparent",
+                color:tip===v?"#e8500a":"#94a3b8",fontSize:"12px",fontWeight:"700",cursor:"pointer"}}>
+              {l}<br/><span style={{fontSize:"10px",opacity:0.7}}>{c}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      {tip==="mail"&&(
+        <div style={{marginBottom:"12px"}}>
+          <div style={{fontSize:"11px",fontWeight:"700",color:"#94a3b8",marginBottom:"6px"}}>KONU</div>
+          <input value={baslik} onChange={e=>setBaslik(e.target.value)} placeholder="MotoTeslim Duyurusu"
+            style={{width:"100%",padding:"10px 12px",borderRadius:"9px",border:"1px solid #1e3a5f",
+              background:"#0d1628",color:"#f1f5f9",fontSize:"13px",outline:"none",boxSizing:"border-box"}}/>
+        </div>
+      )}
+      <div style={{marginBottom:"12px"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px"}}>
+          <div style={{fontSize:"11px",fontWeight:"700",color:"#94a3b8"}}>MESAJ</div>
+          {tip==="sms"&&<div style={{fontSize:"10px",color:mesaj.length>160?"#ef4444":"#475569"}}>{mesaj.length}/160</div>}
+        </div>
+        <textarea value={mesaj} onChange={e=>setMesaj(e.target.value)}
+          placeholder={tip==="sms"?"Kısa mesaj yazın (max 160 karakter)":"Mail içeriğini yazın..."}
+          style={{width:"100%",minHeight:"120px",padding:"12px",borderRadius:"9px",border:"1px solid #1e3a5f",
+            background:"#0d1628",color:"#f1f5f9",fontSize:"13px",resize:"vertical",outline:"none",
+            fontFamily:"inherit",boxSizing:"border-box"}}/>
+      </div>
+      {sonuc.msg&&(
+        <div style={{padding:"10px 14px",borderRadius:"9px",marginBottom:"12px",fontSize:"13px",
+          background:sonuc.type==="success"?"rgba(34,197,94,0.1)":"rgba(239,68,68,0.1)",
+          border:"1px solid "+(sonuc.type==="success"?"rgba(34,197,94,0.3)":"rgba(239,68,68,0.3)"),
+          color:sonuc.type==="success"?"#22c55e":"#ef4444"}}>{sonuc.msg}</div>
+      )}
+      <button onClick={gonder} disabled={loading||!mesaj.trim()}
+        style={{width:"100%",padding:"13px",borderRadius:"10px",border:"none",
+          background:loading||!mesaj.trim()?"#1e3a5f":"#e8500a",
+          color:"#fff",fontWeight:"700",fontSize:"14px",cursor:loading||!mesaj.trim()?"not-allowed":"pointer"}}>
+        {loading?"⏳ Gönderiliyor...":tip==="sms"?"📱 "+smsTeller.length+" Kişiye SMS Gönder":"✉️ "+mailler.length+" Kişiye Mail Gönder"}
+      </button>
+    </div>
+  );
+}
+
 function AdminYasal({aktif}){
   if(!aktif)return null;
   const yasalMetinler=[
@@ -1820,7 +1922,23 @@ function AdminPanel(){
       sb.from("musteriler").select("*").order("created_at",{ascending:false}),
       sb.from("talepler").select("*").order("created_at",{ascending:false}),
     ]);
-    setData({siparisler:sip||[],kuryeler:kur||[],musteriler:mus||[]});
+    // Email'leri admin API'den çek
+    try{
+      const res=await fetch("/api/admin",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({islem:"emailleri_getir"})});
+      const d=await res.json();
+      if(d.ok&&d.users){
+        const emailMap={};
+        d.users.forEach(u=>{emailMap[u.id]=u.email;});
+        const kurEmail=(kur||[]).map(k=>({...k,email:emailMap[k.user_id]||""}));
+        const musEmail=(mus||[]).map(m=>({...m,email:emailMap[m.user_id]||""}));
+        setData({siparisler:sip||[],kuryeler:kurEmail,musteriler:musEmail});
+      }else{
+        setData({siparisler:sip||[],kuryeler:kur||[],musteriler:mus||[]});
+      }
+    }catch{
+      setData({siparisler:sip||[],kuryeler:kur||[],musteriler:mus||[]});
+    }
     setTalepler(tal||[]);
     setLoading(false);
   };
@@ -1958,6 +2076,7 @@ function AdminPanel(){
         <div style={{flex:1}}>
           <div style={{fontSize:"14px",fontWeight:"700"}}>{k.ad} {k.soyad}</div>
           <div style={{fontSize:"12px",color:C.muted,marginTop:"3px"}}>{k.tel}</div>
+          {k.email&&<div style={{fontSize:"11px",color:"#60a5fa",marginTop:"2px"}}>✉️ {k.email}</div>}
           {k.tc&&<div style={{fontSize:"11px",color:C.dim,marginTop:"2px"}}>TC: {k.tc}</div>}
           <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginTop:"8px"}}>
             <span style={{fontSize:"11px",background:"rgba(30,58,96,0.3)",border:"1px solid "+C.border,borderRadius:"6px",padding:"3px 8px",color:C.muted}}>{k.arac_turu||"—"}</span>
@@ -1980,6 +2099,7 @@ function AdminPanel(){
       <div>
         <div style={{fontSize:"13px",fontWeight:"700"}}>{m.ad} {m.soyad}</div>
         <div style={{fontSize:"12px",color:C.muted,marginTop:"3px"}}>{m.tel}</div>
+        {m.email&&<div style={{fontSize:"11px",color:"#60a5fa",marginTop:"2px"}}>✉️ {m.email}</div>}
         {m.tc&&<div style={{fontSize:"11px",color:C.dim,marginTop:"2px"}}>TC: {m.tc}</div>}
         <div style={{fontSize:"11px",color:C.dim,marginTop:"3px"}}>{m.adres}</div>
       </div>
@@ -2007,7 +2127,7 @@ function AdminPanel(){
 
       <div style={{maxWidth:"1100px",margin:"0 auto",padding:"24px 20px"}}>
         <div style={{display:"flex",gap:"6px",marginBottom:"24px",background:C.inBg,borderRadius:"12px",padding:"4px",overflowX:"auto"}}>
-          {[["istatistik","📊 İstatistik"],["siparisler","📦 Siparişler"],["kuryeler","🏍️ Kuryeler"],["musteriler","👤 Müşteriler"],["arama","🔍 Arama"],["talepler","📬 Talepler"],["kariyer","✏️ Kariyer"],["yasal","📋 Yasal"],["ayarlar","⚙️ Ayarlar"]].map(([v,l])=>(
+          {[["istatistik","📊 İstatistik"],["siparisler","📦 Siparişler"],["kuryeler","🏍️ Kuryeler"],["musteriler","👤 Müşteriler"],["arama","🔍 Arama"],["talepler","📬 Talepler"],["bildirim","📨 Bildirim"],["kariyer","✏️ Kariyer"],["yasal","📋 Yasal"],["ayarlar","⚙️ Ayarlar"]].map(([v,l])=>(
             <button key={v} onClick={()=>setTab(v)} style={{flex:1,minWidth:"100px",padding:"9px 14px",borderRadius:"8px",border:"none",background:tab===v?C.accent:"transparent",color:tab===v?"#fff":C.muted,fontSize:"12px",fontWeight:"700",cursor:"pointer",whiteSpace:"nowrap"}}>
               {l}
             </button>
@@ -2189,6 +2309,12 @@ function AdminPanel(){
         )}
 
         {/* ✏️ KARİYER PLANI DÜZENLE */}
+        {!loading&&tab==="bildirim"&&(
+          <div className="fade">
+            <AdminBildirim kuryeler={data.kuryeler} musteriler={data.musteriler}/>
+          </div>
+        )}
+
         {!loading&&tab==="kariyer"&&(
           <div className="fade">
             <div style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"20px",marginBottom:"14px"}}>
