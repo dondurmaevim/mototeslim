@@ -932,7 +932,7 @@ function GondericiModal({onClose, onSuccess}){
     onSuccess({name:form.ad+" "+form.soyad,type:"misafir"});
   };
 
-  return(
+  return(<>
     <div style={modalStyle} onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div style={mBox} className="fade">
         <button style={{position:"absolute",top:"14px",right:"16px",background:"none",border:"none",color:C.muted,fontSize:"22px",cursor:"pointer"}} onClick={onClose}>×</button>
@@ -1025,9 +1025,9 @@ function GondericiModal({onClose, onSuccess}){
           <button onClick={misafir} disabled={!sozlesmeOnay||!kvkkOnay} style={{...btnP,width:"100%",marginTop:"16px",boxShadow:"none",opacity:(!sozlesmeOnay||!kvkkOnay)?0.5:1}}>Misafir Olarak Devam →</button>
         </>)}
       </div>
-      {yasal&&<YasalModal tip={yasal} onClose={()=>setYasal(null)}/>}
     </div>
-  );
+    {yasal&&<YasalModal tip={yasal} onClose={()=>setYasal(null)}/>}
+  </>);
 }
 
 /* ══════════════════════════════════════════════
