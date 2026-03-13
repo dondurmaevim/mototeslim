@@ -121,8 +121,8 @@ function PaketGonder({user,onClose}){
   // Araç tipi belirle (ağırlığa göre)
   const aracTipi=(()=>{
     if(efKg<=0)return null;
-    if(efKg<=15)return "motorsiklet";
-    if(efKg<=250)return "otomobil";
+    if(efKg<=15&&mesafe<=15)return "motorsiklet"; // ≤15kg VE ≤15km
+    if(efKg<=250)return "otomobil";               // 15kg+ VEYA 15km+
     if(efKg<=3000)return "kamyonet";
     return "kamyon";
   })();
