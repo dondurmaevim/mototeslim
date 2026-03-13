@@ -1025,8 +1025,8 @@ function GondericiModal({onClose, onSuccess}){
           <button onClick={misafir} disabled={!sozlesmeOnay||!kvkkOnay} style={{...btnP,width:"100%",marginTop:"16px",boxShadow:"none",opacity:(!sozlesmeOnay||!kvkkOnay)?0.5:1}}>Misafir Olarak Devam →</button>
         </>)}
       </div>
+      {yasal&&<YasalModal tip={yasal} onClose={()=>setYasal(null)}/>}
     </div>
-    {yasal&&<YasalModal tip={yasal} onClose={()=>setYasal(null)}/>}
   );
 }
 
