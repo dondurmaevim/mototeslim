@@ -1533,7 +1533,8 @@ function FooterModal({tip,onClose}){
   );
 }
 
-function AdminYasal(){
+function AdminYasal({aktif}){
+  if(!aktif)return null;
   const yasalMetinler=[
     {id:"kullanim",icon:"📋",baslik:"Kullanım Koşulları & Sözleşme",aciklama:"Kurye ve müşteri kayıt tikinde gösterilir"},
     {id:"kvkk",icon:"🔒",baslik:"KVKK Aydınlatma Metni",aciklama:"Kayıt ve misafir tikinde gösterilir"},
@@ -2188,11 +2189,7 @@ function AdminPanel(){
         )}
 
         {/* ⚙️ AYARLAR */}
-        {!loading&&tab==="yasal"&&(
-          <div className="fade">
-            <AdminYasal/>
-          </div>
-        )}
+        <AdminYasal aktif={!loading&&tab==="yasal"}/>
 
         {!loading&&tab==="ayarlar"&&(
           <div className="fade">
