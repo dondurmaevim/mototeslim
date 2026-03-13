@@ -544,6 +544,9 @@ function KuryeKayit({onClose, onSuccess}){
   const[step,setStep]=useState(1);
   const[loading,setLoading]=useState(false);
   const[alert,setAlert]=useState({type:"",msg:""});
+  const[sozlesmeOnay,setSozlesmeOnay]=useState(false);
+  const[kvkkOnay,setKvkkOnay]=useState(false);
+  const[yasal,setYasal]=useState(null);
   const[form,setForm]=useState({
     ad:"",soyad:"",tc:"",tel:"",email:"",sifre:"",
     arac:"motorsiklet",marka:"",model:"",plaka:"",
@@ -698,18 +701,37 @@ function KuryeKayit({onClose, onSuccess}){
           </div>
         </>)}
 
+        {step===3&&(
+          <div style={{marginTop:"14px",display:"flex",flexDirection:"column",gap:"10px"}}>
+            {[
+              {s:sozlesmeOnay,fn:setSozlesmeOnay,tip:"kullanim",label:"Kullanım Koşulları ve Mesafeli Satış Sözleşmesini"},
+              {s:kvkkOnay,fn:setKvkkOnay,tip:"kvkk",label:"KVKK Aydınlatma Metnini"},
+            ].map(x=>(
+              <label key={x.tip} style={{display:"flex",alignItems:"flex-start",gap:"10px",cursor:"pointer",padding:"10px 12px",borderRadius:"9px",border:"1px solid "+(x.s?"rgba(34,197,94,0.4)":"rgba(239,68,68,0.2)"),background:x.s?"rgba(34,197,94,0.05)":"rgba(239,68,68,0.03)"}}>
+                <input type="checkbox" checked={x.s} onChange={e=>x.fn(e.target.checked)} style={{width:"15px",height:"15px",accentColor:"#22c55e",cursor:"pointer",flexShrink:0,marginTop:"2px"}}/>
+                <span style={{fontSize:"12px",color:"#94a3b8"}}>
+                  <span onClick={e=>{e.preventDefault();setYasal(x.tip);}} style={{color:"#60a5fa",textDecoration:"underline",cursor:"pointer"}}>{x.label}</span> okudum ve kabul ediyorum. *
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+
         <Alert type={alert.type} msg={alert.msg}/>
 
         <div style={{display:"flex",gap:"10px",marginTop:"20px"}}>
           {step>1&&<button onClick={()=>setStep(step-1)} style={{...btnS,flex:"none",padding:"10px 18px",fontSize:"13px"}}>← Geri</button>}
           {step<3
             ?<button onClick={next} style={{...btnP,flex:1,padding:"11px",boxShadow:"none"}}>Devam →</button>
-            :<button onClick={kayitOl} disabled={loading} style={{...btnP,flex:1,padding:"11px",boxShadow:"none",opacity:loading?0.7:1}}>
+            :<button onClick={kayitOl} disabled={loading||!sozlesmeOnay||!kvkkOnay} style={{...btnP,flex:1,padding:"11px",boxShadow:"none",opacity:(loading||!sozlesmeOnay||!kvkkOnay)?0.5:1}}>
               {loading?<span className="spin">⏳</span>:"✓ Kayıt Ol"}
             </button>
           }
         </div>
       </div>
+
+      {/* Yasal metin modal */}
+      {yasal&&<YasalModal tip={yasal} onClose={()=>setYasal(null)}/>}
     </div>
   );
 }
@@ -826,6 +848,9 @@ function GondericiModal({onClose, onSuccess}){
   const[alert,setAlert]=useState({type:"",msg:""});
   const[form,setForm]=useState({ad:"",soyad:"",email:"",tel:"",tc:"",adres:"",sifre:"",refKod:"",iban:"",pazarlamaKatil:false});
   const[err,setErr]=useState({});
+  const[sozlesmeOnay,setSozlesmeOnay]=useState(false);
+  const[kvkkOnay,setKvkkOnay]=useState(false);
+  const[yasal,setYasal]=useState(null);
   const set=k=>e=>setForm(f=>({...f,[k]:e.target.value}));
 
   const giris=async()=>{
@@ -955,8 +980,22 @@ function GondericiModal({onClose, onSuccess}){
               <div style={{fontSize:"11px",color:"#475569",marginTop:"-8px",marginBottom:"8px"}}>IBAN girerseniz biriken primlerinizi çekme talebinde bulunabilirsiniz.</div>
             </div>
           )}
+          {/* Sözleşme onayları - kayıt */}
+          <div style={{display:"flex",flexDirection:"column",gap:"8px",marginTop:"10px"}}>
+            {[
+              {s:sozlesmeOnay,fn:setSozlesmeOnay,tip:"kullanim",label:"Kullanım Koşulları ve Mesafeli Satış Sözleşmesini"},
+              {s:kvkkOnay,fn:setKvkkOnay,tip:"kvkk",label:"KVKK Aydınlatma Metnini"},
+            ].map(x=>(
+              <label key={x.tip} style={{display:"flex",alignItems:"flex-start",gap:"10px",cursor:"pointer",padding:"9px 12px",borderRadius:"9px",border:"1px solid "+(x.s?"rgba(34,197,94,0.4)":"rgba(239,68,68,0.2)"),background:x.s?"rgba(34,197,94,0.05)":"rgba(239,68,68,0.03)"}}>
+                <input type="checkbox" checked={x.s} onChange={e=>x.fn(e.target.checked)} style={{width:"15px",height:"15px",accentColor:"#22c55e",cursor:"pointer",flexShrink:0,marginTop:"2px"}}/>
+                <span style={{fontSize:"12px",color:"#94a3b8"}}>
+                  <span onClick={e=>{e.preventDefault();setYasal(x.tip);}} style={{color:"#60a5fa",textDecoration:"underline",cursor:"pointer"}}>{x.label}</span> okudum ve kabul ediyorum. *
+                </span>
+              </label>
+            ))}
+          </div>
           <Alert type={alert.type} msg={alert.msg}/>
-          <button onClick={kayit} disabled={loading} style={{...btnP,width:"100%",marginTop:"16px",boxShadow:"none",opacity:loading?0.7:1}}>
+          <button onClick={kayit} disabled={loading||!sozlesmeOnay||!kvkkOnay} style={{...btnP,width:"100%",marginTop:"16px",boxShadow:"none",opacity:(loading||!sozlesmeOnay||!kvkkOnay)?0.5:1}}>
             {loading?<span className="spin">⏳</span>:"Kayıt Ol"}
           </button>
         </>)}
@@ -969,10 +1008,25 @@ function GondericiModal({onClose, onSuccess}){
           </div>
           <div><Inp label="Telefon" placeholder="0532 123 4567" value={form.tel} onChange={set("tel")}/>{err.tel&&<div style={{color:C.error,fontSize:"10px",marginTop:"3px"}}>{err.tel}</div>}</div>
           <div><Inp label="Adres" placeholder="Tam adresiniz" value={form.adres} onChange={set("adres")}/>{err.adres&&<div style={{color:C.error,fontSize:"10px",marginTop:"3px"}}>{err.adres}</div>}</div>
-          <button onClick={misafir} style={{...btnP,width:"100%",marginTop:"16px",boxShadow:"none"}}>Misafir Olarak Devam →</button>
+          {/* Sözleşme onayları - misafir */}
+          <div style={{display:"flex",flexDirection:"column",gap:"8px",marginTop:"10px"}}>
+            {[
+              {s:sozlesmeOnay,fn:setSozlesmeOnay,tip:"kullanim",label:"Kullanım Koşulları ve Mesafeli Satış Sözleşmesini"},
+              {s:kvkkOnay,fn:setKvkkOnay,tip:"kvkk",label:"KVKK Aydınlatma Metnini"},
+            ].map(x=>(
+              <label key={x.tip} style={{display:"flex",alignItems:"flex-start",gap:"10px",cursor:"pointer",padding:"9px 12px",borderRadius:"9px",border:"1px solid "+(x.s?"rgba(34,197,94,0.4)":"rgba(239,68,68,0.2)"),background:x.s?"rgba(34,197,94,0.05)":"rgba(239,68,68,0.03)"}}>
+                <input type="checkbox" checked={x.s} onChange={e=>x.fn(e.target.checked)} style={{width:"15px",height:"15px",accentColor:"#22c55e",cursor:"pointer",flexShrink:0,marginTop:"2px"}}/>
+                <span style={{fontSize:"12px",color:"#94a3b8"}}>
+                  <span onClick={e=>{e.preventDefault();setYasal(x.tip);}} style={{color:"#60a5fa",textDecoration:"underline",cursor:"pointer"}}>{x.label}</span> okudum ve kabul ediyorum. *
+                </span>
+              </label>
+            ))}
+          </div>
+          <button onClick={misafir} disabled={!sozlesmeOnay||!kvkkOnay} style={{...btnP,width:"100%",marginTop:"16px",boxShadow:"none",opacity:(!sozlesmeOnay||!kvkkOnay)?0.5:1}}>Misafir Olarak Devam →</button>
         </>)}
       </div>
     </div>
+    {yasal&&<YasalModal tip={yasal} onClose={()=>setYasal(null)}/>}
   );
 }
 
@@ -1346,6 +1400,49 @@ const ADMIN_SIFRE = "mototeslim2024"; // değiştirilebilir
 /* ══════════════════════════════════════════════
    FOOTER MODAL
 ══════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════
+   YASAL METİN MODAL
+══════════════════════════════════════════════ */
+function YasalModal({tip,onClose}){
+  const[metin,setMetin]=useState("");
+  const[loading,setLoading]=useState(true);
+  const basliklar={
+    kullanim:{icon:"📋",baslik:"Kullanım Koşulları & Mesafeli Satış Sözleşmesi"},
+    kvkk:{icon:"🔒",baslik:"KVKK Aydınlatma Metni"},
+    gizlilik:{icon:"🛡️",baslik:"Gizlilik Politikası"},
+    cerez:{icon:"🍪",baslik:"Çerez Politikası"},
+    iade:{icon:"↩️",baslik:"İade & İptal Politikası"},
+    hakkimizda:{icon:"🏢",baslik:"Hakkımızda"},
+    misyon:{icon:"🎯",baslik:"Misyonumuz"},
+  };
+  const info=basliklar[tip]||{icon:"📄",baslik:"Yasal Metin"};
+  useEffect(()=>{
+    sb.from("ayarlar").select("deger").eq("id","yasal_"+tip).maybeSingle().then(({data})=>{
+      setMetin(data?.deger||"Bu metin henüz eklenmemiştir.");
+      setLoading(false);
+    });
+  },[tip]);
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px"}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#111827",border:"1px solid #1e3a5f",borderRadius:"18px",width:"100%",maxWidth:"680px",maxHeight:"88vh",display:"flex",flexDirection:"column"}} className="fade">
+        <div style={{padding:"20px 24px",borderBottom:"1px solid #1e3a5f",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+          <div style={{fontSize:"15px",fontWeight:"800"}}>{info.icon} {info.baslik}</div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#94a3b8",fontSize:"24px",cursor:"pointer",lineHeight:1}}>×</button>
+        </div>
+        <div style={{overflowY:"auto",padding:"24px",flex:1}}>
+          {loading
+            ?<div style={{textAlign:"center",color:"#475569",padding:"40px"}}>⏳ Yükleniyor...</div>
+            :<div style={{fontSize:"13px",color:"#94a3b8",lineHeight:"1.9",whiteSpace:"pre-wrap"}}>{metin}</div>
+          }
+        </div>
+        <div style={{padding:"16px 24px",borderTop:"1px solid #1e3a5f",flexShrink:0,textAlign:"right"}}>
+          <button onClick={onClose} style={{padding:"10px 24px",borderRadius:"9px",border:"none",background:"#e8500a",color:"#fff",fontWeight:"700",cursor:"pointer",fontSize:"13px"}}>Kapat</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FooterModal({tip,onClose}){
   const[form,setForm]=useState({ad:"",tel:"",mesaj:""});
   const[yukleniyor,setYukleniyor]=useState(false);
@@ -1812,7 +1909,7 @@ function AdminPanel(){
 
       <div style={{maxWidth:"1100px",margin:"0 auto",padding:"24px 20px"}}>
         <div style={{display:"flex",gap:"6px",marginBottom:"24px",background:C.inBg,borderRadius:"12px",padding:"4px",overflowX:"auto"}}>
-          {[["istatistik","📊 İstatistik"],["siparisler","📦 Siparişler"],["kuryeler","🏍️ Kuryeler"],["musteriler","👤 Müşteriler"],["arama","🔍 Arama"],["talepler","📬 Talepler"],["kariyer","✏️ Kariyer"],["ayarlar","⚙️ Ayarlar"]].map(([v,l])=>(
+          {[["istatistik","📊 İstatistik"],["siparisler","📦 Siparişler"],["kuryeler","🏍️ Kuryeler"],["musteriler","👤 Müşteriler"],["arama","🔍 Arama"],["talepler","📬 Talepler"],["kariyer","✏️ Kariyer"],["yasal","📋 Yasal"],["ayarlar","⚙️ Ayarlar"]].map(([v,l])=>(
             <button key={v} onClick={()=>setTab(v)} style={{flex:1,minWidth:"100px",padding:"9px 14px",borderRadius:"8px",border:"none",background:tab===v?C.accent:"transparent",color:tab===v?"#fff":C.muted,fontSize:"12px",fontWeight:"700",cursor:"pointer",whiteSpace:"nowrap"}}>
               {l}
             </button>
@@ -2013,6 +2110,71 @@ function AdminPanel(){
         )}
 
         {/* ⚙️ AYARLAR */}
+        {!loading&&tab==="yasal"&&(
+          <div className="fade">
+            {(()=>{
+              const yasalMetinler=[
+                {id:"kullanim",icon:"📋",baslik:"Kullanım Koşulları & Mesafeli Satış Sözleşmesi",aciklama:"Kurye ve müşteri kayıt tikinde gösterilir"},
+                {id:"kvkk",icon:"🔒",baslik:"KVKK Aydınlatma Metni",aciklama:"Kayıt ve misafir tikinde gösterilir"},
+                {id:"gizlilik",icon:"🛡️",baslik:"Gizlilik Politikası",aciklama:"Footer'da gösterilir"},
+                {id:"cerez",icon:"🍪",baslik:"Çerez Politikası",aciklama:"Footer'da gösterilir"},
+                {id:"iade",icon:"↩️",baslik:"İade & İptal Politikası",aciklama:"Footer'da gösterilir"},
+                {id:"hakkimizda",icon:"🏢",baslik:"Hakkımızda",aciklama:"Footer Kurumsal bölümünde"},
+                {id:"misyon",icon:"🎯",baslik:"Misyonumuz",aciklama:"Footer Kurumsal bölümünde"},
+              ];
+              const[aktifMetin,setAktifMetin]=useState("kullanim");
+              const[metinler,setMetinler]=useState({});
+              const[kaydedildi,setKaydedildi]=useState(false);
+              useEffect(()=>{
+                sb.from("ayarlar").select("id,deger").like("id","yasal_%").then(({data})=>{
+                  const m={};
+                  (data||[]).forEach(r=>{m[r.id.replace("yasal_","")]=r.deger||"";});
+                  setMetinler(m);
+                });
+              },[]);
+              const kaydetMetin=async(id)=>{
+                const metin=metinler[id]||"";
+                await sb.from("ayarlar").upsert({id:"yasal_"+id,deger:metin,guncelleme:new Date().toISOString()});
+                setKaydedildi(id);setTimeout(()=>setKaydedildi(false),2000);
+              };
+              const aktifInfo=yasalMetinler.find(m=>m.id===aktifMetin);
+              return(
+                <div>
+                  <div style={{fontSize:"13px",color:"#94a3b8",marginBottom:"16px"}}>Yasal metinleri buradan düzenleyebilirsiniz. Kayıt formlarındaki sözleşme tiklerine ve footer linklerine yansır.</div>
+                  <div style={{display:"flex",gap:"12px"}}>
+                    {/* Sol - metin listesi */}
+                    <div style={{width:"200px",flexShrink:0,display:"flex",flexDirection:"column",gap:"6px"}}>
+                      {yasalMetinler.map(m=>(
+                        <button key={m.id} onClick={()=>setAktifMetin(m.id)} style={{padding:"10px 12px",borderRadius:"9px",border:"1px solid "+(aktifMetin===m.id?"#e8500a":"#1e3a5f"),background:aktifMetin===m.id?"rgba(232,80,10,0.12)":"transparent",color:aktifMetin===m.id?"#e8500a":"#94a3b8",fontSize:"12px",fontWeight:"700",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:"8px"}}>
+                          <span>{m.icon}</span><span style={{flex:1}}>{m.baslik.split(" ")[0]} {m.baslik.split(" ")[1]||""}</span>
+                        </button>
+                      ))}
+                    </div>
+                    {/* Sağ - editör */}
+                    <div style={{flex:1}}>
+                      <div style={{marginBottom:"8px"}}>
+                        <div style={{fontSize:"13px",fontWeight:"800",color:"#f1f5f9"}}>{aktifInfo?.icon} {aktifInfo?.baslik}</div>
+                        <div style={{fontSize:"11px",color:"#475569",marginTop:"2px"}}>{aktifInfo?.aciklama}</div>
+                      </div>
+                      <textarea
+                        value={metinler[aktifMetin]||""}
+                        onChange={e=>setMetinler(m=>({...m,[aktifMetin]:e.target.value}))}
+                        placeholder={"Buraya "+aktifInfo?.baslik+" metnini girin...
+
+Düz metin yazabilirsiniz. Satır başları korunur."}
+                        style={{width:"100%",minHeight:"380px",padding:"14px",borderRadius:"10px",border:"1px solid #1e3a5f",background:"#0d1628",color:"#f1f5f9",fontSize:"12px",lineHeight:"1.8",resize:"vertical",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}
+                      />
+                      <button onClick={()=>kaydetMetin(aktifMetin)} style={{...btnP,width:"100%",boxShadow:"none",marginTop:"10px",padding:"12px",fontSize:"13px"}}>
+                        {kaydedildi===aktifMetin?"✅ Kaydedildi!":"💾 Kaydet"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
         {!loading&&tab==="ayarlar"&&(
           <div className="fade">
             {(()=>{
@@ -2649,8 +2811,9 @@ function App(){
               <div style={{fontSize:"12px",color:C.dim,lineHeight:"1.7"}}>Hızlı, güvenli ve şeffaf teslimat platformu.</div>
             </div>
             {[
-              {baslik:"Kurumsal",linkler:[{l:"Biz Kimiz",m:"kimiz"},{l:"Kariyer Planı",m:"kariyer"},{l:"İletişim",m:"iletisim"}]},
+              {baslik:"Kurumsal",linkler:[{l:"Hakkımızda",m:"hakkimizda"},{l:"Misyonumuz",m:"misyon"},{l:"Kariyer Planı",m:"kariyer"},{l:"İletişim",m:"iletisim"}]},
               {baslik:"Destek",linkler:[{l:"Şikayet",m:"sikayet"},{l:"Öneri & İstek",m:"oneri"},{l:"Sık Sorulan Sorular",m:"sss"}]},
+              {baslik:"Yasal",linkler:[{l:"Kullanım Koşulları",m:"kullanim"},{l:"KVKK & Gizlilik",m:"kvkk"},{l:"Çerez Politikası",m:"cerez"},{l:"İade & İptal",m:"iade"}]},
             ].map(g=>(
               <div key={g.baslik}>
                 <div style={{fontSize:"12px",fontWeight:"800",color:C.text,marginBottom:"12px",letterSpacing:"0.5px"}}>{g.baslik}</div>
@@ -2709,6 +2872,9 @@ function App(){
       {/* 📬 FOOTER MODALları (kimiz, iletisim, sikayet, oneri, sss) */}
       {["kimiz","iletisim","sikayet","oneri","sss"].includes(modal)&&(
         <FooterModal tip={modal} onClose={()=>setModal(null)}/>
+      )}
+      {["kullanim","kvkk","gizlilik","cerez","iade","hakkimizda","misyon"].includes(modal)&&(
+        <YasalModal tip={modal} onClose={()=>setModal(null)}/>
       )}
 
     </div>
