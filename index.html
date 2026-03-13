@@ -1533,6 +1533,84 @@ function FooterModal({tip,onClose}){
   );
 }
 
+function AdminYasal(){
+  const yasalMetinler=[
+    {id:"kullanim",icon:"📋",baslik:"Kullanım Koşulları & Sözleşme",aciklama:"Kurye ve müşteri kayıt tikinde gösterilir"},
+    {id:"kvkk",icon:"🔒",baslik:"KVKK Aydınlatma Metni",aciklama:"Kayıt ve misafir tikinde gösterilir"},
+    {id:"gizlilik",icon:"🛡️",baslik:"Gizlilik Politikası",aciklama:"Footer'da gösterilir"},
+    {id:"cerez",icon:"🍪",baslik:"Çerez Politikası",aciklama:"Footer'da gösterilir"},
+    {id:"iade",icon:"↩️",baslik:"İade & İptal Politikası",aciklama:"Footer'da gösterilir"},
+    {id:"hakkimizda",icon:"🏢",baslik:"Hakkımızda",aciklama:"Footer Kurumsal bölümünde"},
+    {id:"misyon",icon:"🎯",baslik:"Misyonumuz",aciklama:"Footer Kurumsal bölümünde"},
+  ];
+  const[aktifMetin,setAktifMetin]=useState("kullanim");
+  const[metinler,setMetinler]=useState({});
+  const[kaydedildi,setKaydedildi]=useState(false);
+  const[yukleniyor,setYukleniyor]=useState(true);
+
+  useEffect(()=>{
+    sb.from("ayarlar").select("id,deger").like("id","yasal_%").then(({data})=>{
+      const m={};
+      (data||[]).forEach(r=>{m[r.id.replace("yasal_","")]=r.deger||"";});
+      setMetinler(m);
+      setYukleniyor(false);
+    });
+  },[]);
+
+  const kaydetMetin=async(id)=>{
+    const metin=metinler[id]||"";
+    await sb.from("ayarlar").upsert({id:"yasal_"+id,deger:metin,guncelleme:new Date().toISOString()});
+    setKaydedildi(id);
+    setTimeout(()=>setKaydedildi(false),2000);
+  };
+
+  const aktifInfo=yasalMetinler.find(m=>m.id===aktifMetin);
+
+  if(yukleniyor)return <div style={{textAlign:"center",padding:"40px",color:"#475569"}}>⏳ Yükleniyor...</div>;
+
+  return(
+    <div>
+      <div style={{fontSize:"13px",color:"#94a3b8",marginBottom:"16px"}}>Yasal metinleri buradan düzenleyebilirsiniz. Kayıt formlarındaki sözleşme tiklerine ve footer linklerine yansır.</div>
+      <div style={{display:"flex",gap:"12px",flexWrap:"wrap"}}>
+        <div style={{width:"190px",flexShrink:0,display:"flex",flexDirection:"column",gap:"6px"}}>
+          {yasalMetinler.map(m=>(
+            <button key={m.id} onClick={()=>setAktifMetin(m.id)}
+              style={{padding:"10px 12px",borderRadius:"9px",border:"1px solid "+(aktifMetin===m.id?"#e8500a":"#1e3a5f"),
+                background:aktifMetin===m.id?"rgba(232,80,10,0.12)":"transparent",
+                color:aktifMetin===m.id?"#e8500a":"#94a3b8",
+                fontSize:"12px",fontWeight:"700",cursor:"pointer",textAlign:"left",
+                display:"flex",alignItems:"center",gap:"8px"}}>
+              <span>{m.icon}</span>
+              <span style={{flex:1,lineHeight:"1.3"}}>{m.baslik}</span>
+            </button>
+          ))}
+        </div>
+        <div style={{flex:1,minWidth:"260px"}}>
+          <div style={{marginBottom:"10px"}}>
+            <div style={{fontSize:"13px",fontWeight:"800",color:"#f1f5f9"}}>{aktifInfo?.icon} {aktifInfo?.baslik}</div>
+            <div style={{fontSize:"11px",color:"#475569",marginTop:"3px"}}>{aktifInfo?.aciklama}</div>
+          </div>
+          <textarea
+            value={metinler[aktifMetin]||""}
+            onChange={e=>setMetinler(m=>({...m,[aktifMetin]:e.target.value}))}
+            placeholder="Buraya metni girin... Satır başları korunur."
+            style={{width:"100%",minHeight:"380px",padding:"14px",borderRadius:"10px",
+              border:"1px solid #1e3a5f",background:"#0d1628",color:"#f1f5f9",
+              fontSize:"12px",lineHeight:"1.8",resize:"vertical",outline:"none",
+              fontFamily:"inherit",boxSizing:"border-box"}}
+          />
+          <button onClick={()=>kaydetMetin(aktifMetin)}
+            style={{width:"100%",marginTop:"10px",padding:"12px",borderRadius:"10px",
+              border:"none",background:"#e8500a",color:"#fff",fontWeight:"700",
+              fontSize:"13px",cursor:"pointer"}}>
+            {kaydedildi===aktifMetin?"✅ Kaydedildi!":"💾 Kaydet"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AdminPanel(){
   const[giris,setGiris]=useState(false);
   const[sifre,setSifre]=useState("");
@@ -2112,64 +2190,7 @@ function AdminPanel(){
         {/* ⚙️ AYARLAR */}
         {!loading&&tab==="yasal"&&(
           <div className="fade">
-            {(()=>{
-              const yasalMetinler=[
-                {id:"kullanim",icon:"📋",baslik:"Kullanım Koşulları & Mesafeli Satış Sözleşmesi",aciklama:"Kurye ve müşteri kayıt tikinde gösterilir"},
-                {id:"kvkk",icon:"🔒",baslik:"KVKK Aydınlatma Metni",aciklama:"Kayıt ve misafir tikinde gösterilir"},
-                {id:"gizlilik",icon:"🛡️",baslik:"Gizlilik Politikası",aciklama:"Footer'da gösterilir"},
-                {id:"cerez",icon:"🍪",baslik:"Çerez Politikası",aciklama:"Footer'da gösterilir"},
-                {id:"iade",icon:"↩️",baslik:"İade & İptal Politikası",aciklama:"Footer'da gösterilir"},
-                {id:"hakkimizda",icon:"🏢",baslik:"Hakkımızda",aciklama:"Footer Kurumsal bölümünde"},
-                {id:"misyon",icon:"🎯",baslik:"Misyonumuz",aciklama:"Footer Kurumsal bölümünde"},
-              ];
-              const[aktifMetin,setAktifMetin]=useState("kullanim");
-              const[metinler,setMetinler]=useState({});
-              const[kaydedildi,setKaydedildi]=useState(false);
-              useEffect(()=>{
-                sb.from("ayarlar").select("id,deger").like("id","yasal_%").then(({data})=>{
-                  const m={};
-                  (data||[]).forEach(r=>{m[r.id.replace("yasal_","")]=r.deger||"";});
-                  setMetinler(m);
-                });
-              },[]);
-              const kaydetMetin=async(id)=>{
-                const metin=metinler[id]||"";
-                await sb.from("ayarlar").upsert({id:"yasal_"+id,deger:metin,guncelleme:new Date().toISOString()});
-                setKaydedildi(id);setTimeout(()=>setKaydedildi(false),2000);
-              };
-              const aktifInfo=yasalMetinler.find(m=>m.id===aktifMetin);
-              return(
-                <div>
-                  <div style={{fontSize:"13px",color:"#94a3b8",marginBottom:"16px"}}>Yasal metinleri buradan düzenleyebilirsiniz. Kayıt formlarındaki sözleşme tiklerine ve footer linklerine yansır.</div>
-                  <div style={{display:"flex",gap:"12px"}}>
-                    {/* Sol - metin listesi */}
-                    <div style={{width:"200px",flexShrink:0,display:"flex",flexDirection:"column",gap:"6px"}}>
-                      {yasalMetinler.map(m=>(
-                        <button key={m.id} onClick={()=>setAktifMetin(m.id)} style={{padding:"10px 12px",borderRadius:"9px",border:"1px solid "+(aktifMetin===m.id?"#e8500a":"#1e3a5f"),background:aktifMetin===m.id?"rgba(232,80,10,0.12)":"transparent",color:aktifMetin===m.id?"#e8500a":"#94a3b8",fontSize:"12px",fontWeight:"700",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:"8px"}}>
-                          <span>{m.icon}</span><span style={{flex:1}}>{m.baslik.split(" ")[0]} {m.baslik.split(" ")[1]||""}</span>
-                        </button>
-                      ))}
-                    </div>
-                    {/* Sağ - editör */}
-                    <div style={{flex:1}}>
-                      <div style={{marginBottom:"8px"}}>
-                        <div style={{fontSize:"13px",fontWeight:"800",color:"#f1f5f9"}}>{aktifInfo?.icon} {aktifInfo?.baslik}</div>
-                        <div style={{fontSize:"11px",color:"#475569",marginTop:"2px"}}>{aktifInfo?.aciklama}</div>
-                      </div>
-                      <textarea
-                        value={metinler[aktifMetin]||""}
-                        onChange={e=>setMetinler(m=>({...m,[aktifMetin]:e.target.value}))}
-                        placeholder={"Buraya "+aktifInfo?.baslik+" metnini girin... Düz metin yazabilirsiniz."}
-                        style={{width:"100%",minHeight:"380px",padding:"14px",borderRadius:"10px",border:"1px solid #1e3a5f",background:"#0d1628",color:"#f1f5f9",fontSize:"12px",lineHeight:"1.8",resize:"vertical",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}
-                      />
-                      <button onClick={()=>kaydetMetin(aktifMetin)} style={{...btnP,width:"100%",boxShadow:"none",marginTop:"10px",padding:"12px",fontSize:"13px"}}>
-                        {kaydedildi===aktifMetin?"✅ Kaydedildi!":"💾 Kaydet"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
+            <AdminYasal/>
           </div>
         )}
 
