@@ -2159,9 +2159,7 @@ function AdminPanel(){
                       <textarea
                         value={metinler[aktifMetin]||""}
                         onChange={e=>setMetinler(m=>({...m,[aktifMetin]:e.target.value}))}
-                        placeholder={"Buraya "+aktifInfo?.baslik+" metnini girin...
-
-Düz metin yazabilirsiniz. Satır başları korunur."}
+                        placeholder={"Buraya "+aktifInfo?.baslik+" metnini girin... Düz metin yazabilirsiniz."}
                         style={{width:"100%",minHeight:"380px",padding:"14px",borderRadius:"10px",border:"1px solid #1e3a5f",background:"#0d1628",color:"#f1f5f9",fontSize:"12px",lineHeight:"1.8",resize:"vertical",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}
                       />
                       <button onClick={()=>kaydetMetin(aktifMetin)} style={{...btnP,width:"100%",boxShadow:"none",marginTop:"10px",padding:"12px",fontSize:"13px"}}>
