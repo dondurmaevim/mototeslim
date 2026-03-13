@@ -929,7 +929,7 @@ function GondericiModal({onClose, onSuccess}){
     if(!form.tel.trim())e.tel="Zorunlu";
     if(!form.adres.trim())e.adres="Zorunlu";
     if(Object.keys(e).length){setErr(e);return;}
-    onSuccess({name:form.ad+" "+form.soyad,type:"misafir"});
+    onSuccess({name:form.ad+" "+form.soyad,type:"misafir",tel:form.tel,adres:form.adres});
   };
 
   return(<>
@@ -1048,6 +1048,23 @@ function KuryeDash({user,onLogout}){
     const interval=setInterval(yukle,15000);
     return()=>clearInterval(interval);
   },[]);
+
+
+  // Ad gizleme: "Ahmet Karakoç" → "Ah*** Ka**"
+
+  // Net kazanç tahmini: %70'den maks %9 prim düşülür
+  // Referans zinciri varsa az kazanır, yoksa tam %70
+  const netKazanc=(fiyat)=>Math.ceil((fiyat||0)*0.70);
+
+  const adGizle=(tamAd)=>{
+    if(!tamAd)return "—";
+    const parcalar=tamAd.trim().split(" ");
+    return parcalar.map((p,i)=>{
+      if(p.length<=2)return p;
+      if(i===0)return p.slice(0,2)+"*".repeat(p.length-2); // Ad: ilk 2 harf
+      return p.slice(0,2)+"*".repeat(p.length-2); // Soyad: ilk 2 harf
+    }).join(" ");
+  };
 
   const yukle=async()=>{
     try{
@@ -1256,7 +1273,7 @@ function KuryeDash({user,onLogout}){
             </div>
             <div style={{background:"rgba(34,197,94,0.08)",borderRadius:"10px",padding:"12px"}}>
               <div style={{color:C.success,fontWeight:"700",marginBottom:"4px"}}>📥 ALICI</div>
-              <div style={{fontWeight:"600"}}>{aktifSiparis.al_ad}</div>
+              <div style={{fontWeight:"600"}}>{adGizle(aktifSiparis.al_ad)}</div>
               <div style={{color:C.muted,marginTop:"2px"}}>{aktifSiparis.al_tel}</div>
               <div style={{color:C.muted,marginTop:"2px"}}>{aktifSiparis.al_adres}</div>
             </div>
@@ -1264,7 +1281,7 @@ function KuryeDash({user,onLogout}){
           <div style={{display:"flex",gap:"10px",alignItems:"center",marginBottom:"14px",fontSize:"12px"}}>
             <span style={{background:C.accentGlow,border:"1px solid "+C.accent,borderRadius:"8px",padding:"4px 10px",color:C.accent,fontWeight:"700"}}>{aktifSiparis.agirlik} kg</span>
             <span style={{background:"rgba(30,58,96,0.3)",border:"1px solid "+C.border,borderRadius:"8px",padding:"4px 10px",color:C.muted}}>{aktifSiparis.mesafe||"—"} km</span>
-            <span style={{background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.3)",borderRadius:"8px",padding:"4px 10px",color:C.success,fontWeight:"700"}}>₺{Math.ceil((aktifSiparis.fiyat||0)*0.70)} kazanç</span>
+            <span style={{background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.3)",borderRadius:"8px",padding:"4px 10px",color:C.success,fontWeight:"700"}}>₺{netKazanc(aktifSiparis.fiyat)} net kazanç</span>
           </div>
 
           {aktifSiparis.durum==="kabul_edildi"&&(
@@ -1323,7 +1340,8 @@ function KuryeDash({user,onLogout}){
             <div key={s.id} style={{background:C.card,border:"1px solid "+C.border,borderRadius:"13px",padding:"16px",marginBottom:"12px"}} className="fade">
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"12px"}}>
                 <div style={{fontSize:"11px",color:C.dim}}>#{s.id.slice(-6).toUpperCase()}</div>
-                <div style={{fontSize:"13px",fontWeight:"800",color:C.success}}>₺{Math.ceil((s.fiyat||0)*0.70)}</div>
+                <div style={{fontSize:"13px",fontWeight:"800",color:C.success}}>₺{netKazanc(s.fiyat)}</div>
+                <div style={{fontSize:"10px",color:C.dim}}>net kazanç</div>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",fontSize:"12px",marginBottom:"12px"}}>
                 <div>
@@ -1333,7 +1351,7 @@ function KuryeDash({user,onLogout}){
                 </div>
                 <div>
                   <div style={{color:C.success,fontWeight:"700",fontSize:"10px",marginBottom:"3px"}}>📥 ALICI</div>
-                  <div style={{fontWeight:"600"}}>{s.al_ad}</div>
+                  <div style={{fontWeight:"600"}}>{adGizle(s.al_ad)}</div>
                   <div style={{color:C.muted,fontSize:"11px"}}>{s.al_adres}</div>
                 </div>
               </div>
@@ -1383,7 +1401,8 @@ function GecmisTeslimatlar({userId}){
             <div style={{fontSize:"10px",color:C.dim,marginTop:"3px"}}>{new Date(s.created_at).toLocaleDateString("tr-TR")}</div>
           </div>
           <div style={{textAlign:"right"}}>
-            <div style={{fontSize:"15px",fontWeight:"800",color:C.success}}>₺{Math.ceil((s.fiyat||0)*0.70)}</div>
+            <div style={{fontSize:"15px",fontWeight:"800",color:C.success}}>₺{netKazanc(s.fiyat)}</div>
+            <div style={{fontSize:"10px",color:C.dim,marginTop:"2px"}}>net kazanç</div>
             <div style={{fontSize:"10px",color:C.dim,marginTop:"2px"}}>{s.agirlik} kg · {s.mesafe||"—"} km</div>
           </div>
         </div>
