@@ -1870,7 +1870,18 @@ function AdminPanel(){
         refKazanc.toplam=refKazanc.kat1+refKazanc.kat2+refKazanc.kat3;
       }
     }
-    setSeciliKisi({tip,data:kisi,siparisler,davetilenler:davetilenler||[],refKazanc});
+    // Email'i admin API'den çek
+    let email="";
+    try{
+      const res=await fetch("/api/admin",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({islem:"emailleri_getir"})});
+      const d=await res.json();
+      if(d.ok&&d.users){
+        const u=d.users.find(u=>u.id===kisi.user_id);
+        email=u?.email||"";
+      }
+    }catch{}
+    setSeciliKisi({tip,data:{...kisi,email},siparisler,davetilenler:davetilenler||[],refKazanc});
     setDetayYukleniyor(false);
   };
 
@@ -2453,6 +2464,7 @@ function AdminPanel(){
               <div style={{background:C.inBg,borderRadius:"12px",padding:"16px",marginBottom:"16px"}}>
                 <div style={{fontSize:"16px",fontWeight:"700",marginBottom:"6px"}}>{k.ad} {k.soyad}</div>
                 <div style={{fontSize:"12px",color:C.muted,marginBottom:"3px"}}>📞 {k.tel}</div>
+                {k.email&&<div style={{fontSize:"12px",color:"#60a5fa",marginBottom:"3px"}}>✉️ {k.email}</div>}
                 {k.tc&&<div style={{fontSize:"12px",color:C.muted,marginBottom:"3px"}}>🪪 TC: {k.tc}</div>}
                 {k.plaka&&<div style={{fontSize:"12px",color:C.muted,marginBottom:"3px"}}>🚗 Plaka: {k.plaka}</div>}
                 {k.arac_turu&&<div style={{fontSize:"12px",color:C.muted,marginBottom:"3px"}}>🚘 {k.arac_turu} {k.arac_marka} {k.arac_model}</div>}
