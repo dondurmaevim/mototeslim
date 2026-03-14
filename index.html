@@ -1922,7 +1922,8 @@ function AdminPanel(){
       sb.from("musteriler").select("*").order("created_at",{ascending:false}),
       sb.from("talepler").select("*").order("created_at",{ascending:false}),
     ]);
-    // Email'leri admin API'den çek
+    // Email'leri admin API'den çek (hata olsa bile kuryeler gösterilsin)
+    setData({siparisler:sip||[],kuryeler:kur||[],musteriler:mus||[]});
     try{
       const res=await fetch("/api/admin",{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({islem:"emailleri_getir"})});
@@ -1933,11 +1934,9 @@ function AdminPanel(){
         const kurEmail=(kur||[]).map(k=>({...k,email:emailMap[k.user_id]||""}));
         const musEmail=(mus||[]).map(m=>({...m,email:emailMap[m.user_id]||""}));
         setData({siparisler:sip||[],kuryeler:kurEmail,musteriler:musEmail});
-      }else{
-        setData({siparisler:sip||[],kuryeler:kur||[],musteriler:mus||[]});
       }
-    }catch{
-      setData({siparisler:sip||[],kuryeler:kur||[],musteriler:mus||[]});
+    }catch(e){
+      console.log("Email çekme hatası:",e);
     }
     setTalepler(tal||[]);
     setLoading(false);
