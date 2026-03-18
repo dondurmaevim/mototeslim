@@ -1,9 +1,9 @@
 {
-  "buildCommand": "npm run build && cp public/admin.html dist/admin.html",
+  "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "routes": [
-    { "src": "/admin.html", "dest": "/admin.html" },
-    { "src": "^/api/(.*)", "dest": "/api/$1" },
-    { "src": "/(.*)", "dest": "/index.html" }
+  "rewrites": [
+    { "source": "/admin.html", "destination": "/admin.html" },
+    { "source": "/api/:path*", "destination": "/api/:path*" },
+    { "source": "/:path*", "destination": "/index.html" }
   ]
 }
