@@ -1,7 +1,9 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "rewrites": [
-    { "source": "/((?!admin.html).*)", "destination": "/index.html" }
+  "routes": [
+    { "src": "/admin.html", "dest": "/admin.html" },
+    { "src": "^/api/(.*)", "dest": "/api/$1" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
