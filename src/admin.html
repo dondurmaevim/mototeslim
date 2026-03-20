@@ -1402,7 +1402,7 @@ function App(){
   const logout=async()=>{await sb.auth.signOut();setUser(null);setOk(false);};
 
   if(sifreSifirla)return <SifreDegistir/>;
-  if(window.location.pathname==='/admin')return <AdminPanel/>;
+  return <AdminPanel/>;
   if(!authChecked)return(
     <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{textAlign:"center"}}>
